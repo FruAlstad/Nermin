@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Nermin — Sportbil</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;700&family=Outfit:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app outside" id="app">
+    <div class="hud-top">
+      <div class="brand">Nermin</div>
+      <p class="hint" id="hint">Din sportbil väntar. Öppna förardörren.</p>
+    </div>
+
+    <section class="exterior" id="exterior" aria-label="Sportbilen utifrån">
+      <div class="lot">
+        <div class="sports-car" id="parkedCar">
+          <div class="car-shadow"></div>
+
+          <div class="sc-body">
+            <div class="sc-hood"></div>
+            <div class="sc-cabin"></div>
+            <div class="sc-windshield" title="Vindruta"></div>
+            <div class="sc-side-glass" title="Sido fönster"></div>
+            <div class="sc-rear-glass" title="Bakruta"></div>
+            <div class="sc-window-label">Fönster</div>
+            <div class="sc-stripe"></div>
+            <div class="sc-vent left"></div>
+            <div class="sc-vent right"></div>
+            <div class="sc-spoiler"></div>
+            <div class="sc-splitter"></div>
+            <div class="sc-light head l"></div>
+            <div class="sc-light head r"></div>
+            <div class="sc-light tail l"></div>
+            <div class="sc-light tail r"></div>
+            <div class="sc-grill"></div>
+            <div class="sc-exhaust l"></div>
+            <div class="sc-exhaust r"></div>
+            <div class="wheel sc-w fl"></div>
+            <div class="wheel sc-w fr"></div>
+            <div class="wheel sc-w rl"></div>
+            <div class="wheel sc-w rr"></div>
+            <div class="handle-hint" id="driverHandleHint">Öppna dörr</div>
+          </div>
+
+          <button type="button" class="door driver-door sport" id="driverDoor" aria-label="Öppna förardörren">
+            <span class="door-panel"></span>
+            <span class="door-window"></span>
+            <span class="door-handle"></span>
+            <span class="door-line"></span>
+          </button>
+
+          <button type="button" class="door passenger-door sport" id="passengerDoor" aria-label="Öppna passagerardörren">
+            <span class="door-panel"></span>
+            <span class="door-window"></span>
+            <span class="door-handle"></span>
+            <span class="door-line"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="exterior-actions" id="exteriorActions">
+        <button type="button" class="big-act" id="enterCar" hidden>Sätt dig i sportbilen</button>
+        <button type="button" class="big-act secondary" id="closeDoorOutside" hidden>Stäng dörren</button>
+      </div>
+    </section>
+
+    <div class="viewport" id="viewport" hidden>
+      <canvas id="view"></canvas>
+      <div class="glass" aria-hidden="true"></div>
+      <div class="side-window left-win" aria-hidden="true"></div>
+      <div class="side-window right-win" aria-hidden="true"></div>
+      <div class="a-pillar left" aria-hidden="true"></div>
+      <div class="a-pillar right" aria-hidden="true"></div>
+      <div class="roof-liner" aria-hidden="true"></div>
+      <div class="window-frame" aria-hidden="true"></div>
+      <div class="door-open-overlay" id="doorOverlay" hidden></div>
+      <div class="mirror center-mirror" aria-hidden="true">
+        <div class="mirror-frame">Backspegel</div>
+        <canvas id="rear" width="200" height="70"></canvas>
+      </div>
+      <div class="mirror side-mirror left-mirror" aria-hidden="true">
+        <div class="mirror-frame">Vänster</div>
+        <canvas id="leftMirror" width="110" height="72"></canvas>
+      </div>
+      <div class="mirror side-mirror right-mirror" aria-hidden="true">
+        <div class="mirror-frame">Höger</div>
+        <canvas id="rightMirror" width="110" height="72"></canvas>
+      </div>
+
+      <div class="minimap-wrap" aria-label="Karta">
+        <canvas id="minimap" width="160" height="160"></canvas>
+        <span class="minimap-label">Karta</span>
+      </div>
+
+      <div class="hood sport-hood" aria-hidden="true"></div>
+    </div>
+
+    <div class="cockpit sport-cockpit" id="cockpit" hidden>
+      <div class="dash-top"></div>
+      <div class="dash-row">
+        <div class="cluster fuel-only">
+          <div class="dial">
+            <svg viewBox="0 0 100 100" class="dial-svg">
+              <circle cx="50" cy="50" r="42" class="dial-face" />
+              <path id="fuelNeedle" d="M50 50 L50 18" class="needle fuel" />
+              <circle cx="50" cy="50" r="4" class="dial-hub" />
+            </svg>
+            <span>BRÄNSLE</span>
+          </div>
+          <div class="signals">
+            <span class="blinker" id="blinkL">◀</span>
+            <span class="light-dot" id="engineLight">ENG</span>
+            <span class="blinker" id="blinkR">▶</span>
+          </div>
+        </div>
+
+        <div class="wheel-area">
+          <div class="wheel-center">
+            <div class="gauges-over-wheel">
+              <div class="dial compact">
+                <svg viewBox="0 0 100 100" class="dial-svg">
+                  <circle cx="50" cy="50" r="42" class="dial-face" />
+                  <path id="rpmNeedle" d="M50 50 L50 14" class="needle rpm" />
+                  <circle cx="50" cy="50" r="4" class="dial-hub" />
+                </svg>
+                <span>RPM</span>
+              </div>
+              <div class="speedo compact">
+                <strong id="speed">0</strong>
+                <span>km/h</span>
+              </div>
+              <div class="gear-over-wheel" id="gearDisplay">
+                <span class="gear-over-label">Växel</span>
+                <strong id="gear">N</strong>
+              </div>
+            </div>
+
+            <div class="steering bmw-wheel" id="steering" aria-label="BMW-ratt">
+              <div class="rim"></div>
+              <div class="spoke s-left">
+                <span class="mf-btn"></span>
+                <span class="mf-btn"></span>
+              </div>
+              <div class="spoke s-right">
+                <span class="mf-btn"></span>
+                <span class="mf-btn"></span>
+              </div>
+              <div class="spoke s-bottom"></div>
+              <div class="hub">
+                <span class="bmw-roundel" aria-hidden="true">
+                  <span class="bmw-ring"></span>
+                  <span class="bmw-quad q1"></span>
+                  <span class="bmw-quad q2"></span>
+                  <span class="bmw-quad q3"></span>
+                  <span class="bmw-quad q4"></span>
+                </span>
+              </div>
+            </div>
+            <p class="shift-hint">Q ner · E upp</p>
+          </div>
+
+          <div class="wheel-side">
+            <div class="key-ignition-row" id="keyZone">
+              <button type="button" class="key-btn compact-key" id="key" hidden>
+                <span class="car-key" aria-hidden="true">
+                  <span class="ck-head">
+                    <span class="ck-logo">N</span>
+                    <span class="ck-btn lock"></span>
+                    <span class="ck-btn unlock"></span>
+                  </span>
+                  <span class="ck-blade">
+                    <span class="ck-teeth"></span>
+                  </span>
+                </span>
+                <span id="keyCaption">Ta upp</span>
+              </button>
+
+              <div class="keyhole-wrap beside-wheel" id="keyholeWrap" hidden>
+                <p class="keyhole-label" id="keyholeLabel">Nyckelhål</p>
+                <button type="button" class="keyhole" id="slot" aria-label="Nyckelhål — sätt i nyckeln">
+                  <span class="keyhole-ring"></span>
+                  <span class="keyhole-face">
+                    <span class="keyhole-slot"></span>
+                  </span>
+                  <span class="key-in-hole car-key-inline" id="keyInHole" hidden>
+                    <span class="ck-head mini">
+                      <span class="ck-logo">N</span>
+                    </span>
+                    <span class="ck-blade mini"></span>
+                  </span>
+                </button>
+                <button type="button" class="key-out" id="keyOut" hidden>Ta ut</button>
+              </div>
+            </div>
+
+            <div class="shifter" id="shifter" aria-label="Växelspak" data-gear="N">
+              <div class="shifter-gate">
+                <span class="gate-mark" data-pos="R">R</span>
+                <span class="gate-mark" data-pos="1">1</span>
+                <span class="gate-mark" data-pos="3">3</span>
+                <span class="gate-mark" data-pos="5">5</span>
+                <span class="gate-mark" data-pos="N">N</span>
+                <span class="gate-mark" data-pos="2">2</span>
+                <span class="gate-mark" data-pos="4">4</span>
+                <span class="gate-mark" data-pos="6">6</span>
+                <div class="gate-slots" aria-hidden="true"></div>
+                <div class="shift-stick" id="shiftStick">
+                  <span class="stick-shaft"></span>
+                  <span class="stick-knob"></span>
+                </div>
+              </div>
+              <p class="shifter-caption">Växelspak</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="right-panel">
+          <button type="button" class="drive-now-btn" id="driveNow" hidden>KÖR NU</button>
+          <button type="button" class="repair-btn" id="repairEngine" hidden>Laga motorn</button>
+          <button type="button" class="door-inner-btn" id="innerDoorBtn">Öppna dörr</button>
+          <button type="button" class="exit-btn" id="exitCar" hidden>Gå ur bilen</button>
+
+          <div class="belt-station" id="beltStation" hidden>
+            <button type="button" class="belt-btn" id="belt">Sätt på bilbältet</button>
+            <button type="button" class="belt-btn unbuckle" id="unbelt" hidden>Ta av bilbältet</button>
+            <div class="buckle" id="buckle" aria-hidden="true">
+              <span class="buckle-slot"></span>
+              <span class="buckle-tongue" id="buckleTongue"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pedals" id="controls" hidden>
+      <button type="button" class="pedal shift" id="shiftDown" aria-label="Växla ner">Q ▼</button>
+      <button type="button" class="pedal turn" data-dir="left">◀</button>
+      <button type="button" class="pedal brake" data-dir="down">Broms</button>
+      <button type="button" class="pedal gas" data-dir="up">Gas</button>
+      <button type="button" class="pedal turn" data-dir="right">▶</button>
+      <button type="button" class="pedal shift up" id="shiftUp" aria-label="Växla upp">E ▲</button>
+    </div>
+
+    <p class="toast" id="lesson" role="status"></p>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
