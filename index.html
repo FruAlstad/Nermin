@@ -12,6 +12,7 @@
 <body>
   <div class="app outside" id="app">
     <div class="hud-top">
+      <a class="to-ring" href="ring.html">Ring</a>
       <div class="brand">Nermin</div>
       <p class="hint" id="hint">Din sportbil väntar. Öppna förardörren.</p>
     </div>
@@ -23,11 +24,13 @@
 
           <div class="sc-body">
             <div class="sc-hood"></div>
+            <div class="sc-hood-line"></div>
             <div class="sc-cabin"></div>
             <div class="sc-windshield" title="Vindruta"></div>
             <div class="sc-side-glass" title="Sido fönster"></div>
             <div class="sc-rear-glass" title="Bakruta"></div>
-            <div class="sc-window-label">Fönster</div>
+            <div class="sc-mirror left-m"></div>
+            <div class="sc-mirror right-m"></div>
             <div class="sc-stripe"></div>
             <div class="sc-vent left"></div>
             <div class="sc-vent right"></div>
@@ -38,10 +41,11 @@
             <div class="sc-light tail l"></div>
             <div class="sc-light tail r"></div>
             <div class="sc-grill"></div>
+            <div class="sc-badge">N</div>
             <div class="sc-exhaust l"></div>
             <div class="sc-exhaust r"></div>
-            <div class="wheel sc-w fl"></div>
-            <div class="wheel sc-w fr"></div>
+            <div class="wheel sc-w fl"><span class="rim-spin"></span></div>
+            <div class="wheel sc-w fr"><span class="rim-spin"></span></div>
             <div class="wheel sc-w rl"></div>
             <div class="wheel sc-w rr"></div>
             <div class="handle-hint" id="driverHandleHint">Öppna dörr</div>
@@ -78,17 +82,27 @@
       <div class="a-pillar right" aria-hidden="true"></div>
       <div class="roof-liner" aria-hidden="true"></div>
       <div class="window-frame" aria-hidden="true"></div>
+      <div class="door-card left-door-card" aria-hidden="true">
+        <span class="door-handle-inner"></span>
+        <span class="door-speaker"></span>
+      </div>
+      <div class="door-card right-door-card" aria-hidden="true">
+        <span class="door-handle-inner"></span>
+        <span class="door-speaker"></span>
+      </div>
+      <div class="dash-shelf" aria-hidden="true"></div>
+      <div class="seatbelt-visual" id="seatbeltVisual" hidden aria-hidden="true">
+        <span class="belt-diag"></span>
+        <span class="belt-lap-bar"></span>
+      </div>
       <div class="door-open-overlay" id="doorOverlay" hidden></div>
       <div class="mirror center-mirror" aria-hidden="true">
-        <div class="mirror-frame">Backspegel</div>
         <canvas id="rear" width="200" height="70"></canvas>
       </div>
       <div class="mirror side-mirror left-mirror" aria-hidden="true">
-        <div class="mirror-frame">Vänster</div>
         <canvas id="leftMirror" width="110" height="72"></canvas>
       </div>
       <div class="mirror side-mirror right-mirror" aria-hidden="true">
-        <div class="mirror-frame">Höger</div>
         <canvas id="rightMirror" width="110" height="72"></canvas>
       </div>
 
@@ -98,10 +112,15 @@
       </div>
 
       <div class="hood sport-hood" aria-hidden="true"></div>
+      <div class="rev-exhaust" id="revExhaust" hidden aria-hidden="true"></div>
     </div>
 
     <div class="cockpit sport-cockpit" id="cockpit" hidden>
-      <div class="dash-top"></div>
+      <div class="dash-top">
+        <span class="dash-vent left"></span>
+        <span class="dash-stitch"></span>
+        <span class="dash-vent right"></span>
+      </div>
       <div class="dash-row">
         <div class="cluster fuel-only">
           <div class="dial">
@@ -220,8 +239,12 @@
         </div>
 
         <div class="right-panel">
+          <div class="drive-mode" id="driveMode" role="group" aria-label="Körläge">
+            <button type="button" class="mode-btn comfort on" id="modeComfort" aria-pressed="true">Komfort</button>
+            <button type="button" class="mode-btn sport" id="modeSport" aria-pressed="false">Sport</button>
+          </div>
           <button type="button" class="drive-now-btn" id="driveNow" hidden>KÖR NU</button>
-          <button type="button" class="repair-btn" id="repairEngine" hidden>Laga motorn</button>
+          <button type="button" class="repair-btn" id="repairEngine" hidden>Byt motor</button>
           <button type="button" class="door-inner-btn" id="innerDoorBtn">Öppna dörr</button>
           <button type="button" class="exit-btn" id="exitCar" hidden>Gå ur bilen</button>
 
@@ -237,16 +260,56 @@
       </div>
     </div>
 
-    <div class="pedals" id="controls" hidden>
-      <button type="button" class="pedal shift" id="shiftDown" aria-label="Växla ner">Q ▼</button>
-      <button type="button" class="pedal turn" data-dir="left">◀</button>
-      <button type="button" class="pedal brake" data-dir="down">Broms</button>
-      <button type="button" class="pedal gas" data-dir="up">Gas</button>
-      <button type="button" class="pedal turn" data-dir="right">▶</button>
-      <button type="button" class="pedal shift up" id="shiftUp" aria-label="Växla upp">E ▲</button>
+    <p class="toast" id="lesson" role="status"></p>
+
+    <div class="held-key" id="heldKey" hidden aria-hidden="true">
+      <span class="car-key big-key">
+        <span class="ck-head">
+          <span class="ck-logo">N</span>
+          <span class="ck-btn lock"></span>
+          <span class="ck-btn unlock"></span>
+        </span>
+        <span class="ck-blade">
+          <span class="ck-teeth"></span>
+        </span>
+      </span>
+      <span class="held-key-label">Håller nyckeln</span>
     </div>
 
-    <p class="toast" id="lesson" role="status"></p>
+    <div class="engine-bay" id="engineBay" hidden>
+      <div class="engine-bay-card">
+        <h2>Byt motor</h2>
+        <p class="engine-bay-hint" id="engineBayHint">Motorn är sönder. Ta ur den först.</p>
+        <div class="engine-bay-stage">
+          <button type="button" class="engine-slot" id="engineSlot" aria-label="Motorrum">
+            <span class="engine-block broken" id="brokenEngine">
+              <span class="eng-block"></span>
+              <span class="eng-smoke"></span>
+              <span class="eng-label">Sönder</span>
+            </span>
+            <span class="engine-block fresh" id="fittedEngine" hidden>
+              <span class="eng-block"></span>
+              <span class="eng-label">Ny motor</span>
+            </span>
+            <span class="engine-empty" id="engineEmpty" hidden>Tomt motorrum</span>
+          </button>
+          <button type="button" class="new-engine-btn" id="newEngine" hidden>
+            <span class="engine-block fresh small">
+              <span class="eng-block"></span>
+            </span>
+            <span>Ta ny motor</span>
+          </button>
+        </div>
+        <button type="button" class="engine-done-btn" id="engineDone" hidden>Klart — stäng huven</button>
+      </div>
+    </div>
+
+    <div class="held-engine" id="heldEngine" hidden aria-hidden="true">
+      <span class="engine-block fresh">
+        <span class="eng-block"></span>
+      </span>
+      <span class="held-key-label">Håller ny motor</span>
+    </div>
   </div>
   <script src="script.js"></script>
 </body>

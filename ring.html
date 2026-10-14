@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nermin — Ring</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;700&family=Outfit:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="ring.css" />
+</head>
+<body>
+  <div class="studio" id="studio">
+    <header class="top">
+      <div>
+        <p class="eyebrow">Nermin ateljé</p>
+        <h1>Designa din ring</h1>
+      </div>
+      <a class="back" href="index.html">Sportbil</a>
+    </header>
+
+    <main class="layout">
+      <section class="stage-wrap" aria-label="Ringen">
+        <div class="stage" id="stage">
+          <div class="spark s1"></div>
+          <div class="spark s2"></div>
+          <div class="spark s3"></div>
+          <div class="spark s4"></div>
+
+          <div class="finger" id="finger" hidden>
+            <span class="nail"></span>
+            <span class="knuckle"></span>
+          </div>
+
+          <div class="ring-rig" id="ringRig">
+            <div class="ring" id="ring">
+              <div class="band b3"></div>
+              <div class="band b2"></div>
+              <div class="band b1"></div>
+              <div class="band twist" id="twist"></div>
+              <div class="pave" id="pave" aria-hidden="true"></div>
+              <div class="mount" id="mount">
+                <span class="prong a"></span>
+                <span class="prong b"></span>
+                <span class="prong c"></span>
+                <span class="prong d"></span>
+                <span class="gem" id="gem"></span>
+              </div>
+              <div class="signet" id="signet">
+                <span id="signetLetter">N</span>
+              </div>
+            </div>
+          </div>
+          <p class="engrave" id="engrave"></p>
+          <div class="floor-glow" aria-hidden="true"></div>
+          <p class="drag-hint" id="dragHint">Dra för att snurra</p>
+        </div>
+
+        <div class="stage-actions">
+          <button type="button" class="ghost" id="flipBtn">Visa insidan</button>
+          <button type="button" class="ghost" id="fingerBtn">Sätt på fingret</button>
+        </div>
+        <p class="live" id="summary">Guldring med diamant · 54 mm</p>
+      </section>
+
+      <section class="panel" aria-label="Välj utseende">
+        <div class="group">
+          <h2>Färdiga ringar</h2>
+          <div class="presets" id="presets"></div>
+        </div>
+
+        <div class="group">
+          <h2>Metall</h2>
+          <div class="choices" id="metals"></div>
+        </div>
+
+        <div class="group">
+          <h2>Sten</h2>
+          <div class="choices gems" id="gems"></div>
+        </div>
+
+        <div class="group">
+          <h2>Modell</h2>
+          <div class="choices" id="models"></div>
+        </div>
+
+        <div class="group">
+          <div class="row-label">
+            <h2>Storlek</h2>
+            <strong id="sizeLabel">54 mm</strong>
+          </div>
+          <input id="size" type="range" min="48" max="70" value="54" aria-label="Ringstorlek i millimeter" />
+        </div>
+
+        <div class="group">
+          <h2>Gravyr inuti</h2>
+          <input id="engraving" class="text" type="text" maxlength="18" placeholder="Till exempel Nermin" autocomplete="off" />
+        </div>
+
+        <div class="price-row">
+          <span>Pris</span>
+          <strong id="price">6 600 kr</strong>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="ghost" id="randomBtn">Slumpa</button>
+          <button type="button" class="ghost" id="saveBtn">Spara</button>
+          <button type="button" class="solid" id="orderBtn">Beställ ringen</button>
+        </div>
+
+        <div class="group saved-group">
+          <h2>Sparade</h2>
+          <div class="saved" id="saved"></div>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal" id="modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="orderTitle">
+        <p class="eyebrow">Klart</p>
+        <h2 id="orderTitle">Ringen är beställd</h2>
+        <p id="orderText"></p>
+        <button type="button" class="solid" id="closeModal">Tillbaka till ateljén</button>
+      </div>
+    </div>
+
+    <p class="toast" id="toast" role="status"></p>
+  </div>
+  <script src="ring.js"></script>
+</body>
+</html>

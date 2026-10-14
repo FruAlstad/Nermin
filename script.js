@@ -14,6 +14,18 @@
   const exitCarBtn = document.getElementById("exitCar");
   const driveNowBtn = document.getElementById("driveNow");
   const repairBtn = document.getElementById("repairEngine");
+  const modeComfortBtn = document.getElementById("modeComfort");
+  const modeSportBtn = document.getElementById("modeSport");
+  const heldKey = document.getElementById("heldKey");
+  const engineBay = document.getElementById("engineBay");
+  const engineBayHint = document.getElementById("engineBayHint");
+  const engineSlot = document.getElementById("engineSlot");
+  const brokenEngine = document.getElementById("brokenEngine");
+  const fittedEngine = document.getElementById("fittedEngine");
+  const engineEmpty = document.getElementById("engineEmpty");
+  const newEngineBtn = document.getElementById("newEngine");
+  const engineDoneBtn = document.getElementById("engineDone");
+  const heldEngine = document.getElementById("heldEngine");
   const doorOverlay = document.getElementById("doorOverlay");
   const engineLight = document.getElementById("engineLight");
   const keyBtn = document.getElementById("key");
@@ -27,7 +39,6 @@
   const unbelt = document.getElementById("unbelt");
   const beltStation = document.getElementById("beltStation");
   const buckle = document.getElementById("buckle");
-  const controls = document.getElementById("controls");
   const steering = document.getElementById("steering");
   const speedEl = document.getElementById("speed");
   const gearEl = document.getElementById("gear");
@@ -37,6 +48,7 @@
   const blinkR = document.getElementById("blinkR");
   const rpmNeedle = document.getElementById("rpmNeedle");
   const fuelNeedle = document.getElementById("fuelNeedle");
+  const revExhaust = document.getElementById("revExhaust");
   const canvas = document.getElementById("view");
   const ctx = canvas.getContext("2d");
   const rear = document.getElementById("rear");
@@ -49,10 +61,10 @@
   const mapCtx = minimap.getContext("2d");
 
   const SEG_LEN = 200;
-  const ROAD_W = 2200;
-  const CAM_H = 1200;
-  const DRAW_DIST = 140;
-  const FOV = 100;
+  const ROAD_W = 2000;
+  const CAM_H = 1000;
+  const CAM_DEPTH = 0.84;
+  const DRAW_DIST = 160;
 
   const state = {
     // outside -> doorOpen -> insideOpen -> insideClosed -> pickup -> insert -> belt -> drive
@@ -68,7 +80,7 @@
     belted: false,
     speed: 0,
     pos: 0,
-    playerX: 0.35,
+    playerX: 0.42,
     curve: 0,
     steer: 0,
     steerRate: 0,
@@ -79,6 +91,13 @@
     distance: 0,
     shiftCooldown: 0,
     blink: 0,
+    rev: 0,
+    hasRevved: false,
+    bump: 0,
+    hitCd: 0,
+    driveMode: "comfort",
+    engineSwap: "idle", // idle | remove | pickNew | holdNew | fitted
+    holdingEngine: false,
     // Karta — kör runt fritt
     mapX: 0,
     mapZ: -120,
@@ -108,13 +127,17 @@
     segments.push({ index: i, curve, y });
   }
 
-  const carColors = ["#c0392b", "#2980b9", "#2c3e50", "#bdc3c7", "#27ae60", "#8e44ad", "#d35400"];
-  for (let n = 0; n < 14; n++) {
+  const carColors = ["#c0392b", "#2980b9", "#2c3e50", "#ecf0f1", "#27ae60", "#8e44ad", "#d35400", "#f1c40f", "#1abc9c", "#e74c3c", "#34495e", "#16a085"];
+  const carKinds = ["sedan", "suv", "sport", "hatch"];
+  for (let n = 0; n < 12; n++) {
+    const oncoming = n % 3 === 0;
     state.traffic.push({
-      z: 30 + n * 55 + Math.random() * 20,
-      x: Math.random() > 0.45 ? 0.45 : -0.4,
-      speed: 28 + Math.random() * 18,
+      z: 14 + n * 22 + Math.random() * 6,
+      x: oncoming ? -0.46 : 0.46,
+      speed: oncoming ? -(18 + Math.random() * 14) : 16 + Math.random() * 18,
       color: carColors[n % carColors.length],
+      kind: carKinds[n % carKinds.length],
+      oncoming,
     });
   }
 
@@ -208,17 +231,37 @@
     o.stop(t + 0.4);
   }
 
+  function playBump() {
+    ensureAudio();
+    if (!audio.ctx) return;
+    const t = audio.ctx.currentTime;
+    const o = audio.ctx.createOscillator();
+    const g = audio.ctx.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.exponentialRampToValueAtTime(36, t + 0.2);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.32, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    o.connect(g);
+    g.connect(audio.sfx || audio.ctx.destination);
+    o.start(t);
+    o.stop(t + 0.25);
+  }
+
   function setEngineSound() {
     if (!audio.ctx || !audio.engine) return;
-    const gas = state.input.up && state.phase === "drive";
+    const gas = state.input.up && state.engineOn && state.phase === "drive";
+    const rev = state.rev || 0;
     const rpm = state.rpm || (700 + Math.abs(state.speed) * 55 + (gas ? 350 : 0) + (state.engineOn ? 80 : 0));
     const t = audio.ctx.currentTime;
-    audio.engine.oscA.frequency.setTargetAtTime(rpm / 14, t, 0.06);
-    audio.engine.oscB.frequency.setTargetAtTime(rpm / 28, t, 0.06);
-    audio.engine.oscC.frequency.setTargetAtTime(rpm / 9, t, 0.08);
-    audio.engine.filter.frequency.setTargetAtTime(160 + Math.abs(state.speed) * 4 + (gas ? 80 : 0), t, 0.08);
-    const vol = state.engineOn ? 0.04 + Math.abs(state.speed) * 0.0011 + (gas ? 0.025 : 0) : 0;
-    audio.master.gain.setTargetAtTime(vol, t, 0.08);
+    audio.engine.oscA.frequency.setTargetAtTime(rpm / 14, t, 0.05);
+    audio.engine.oscB.frequency.setTargetAtTime(rpm / 28, t, 0.05);
+    audio.engine.oscC.frequency.setTargetAtTime(rpm / 9, t, 0.06);
+    audio.engine.filter.frequency.setTargetAtTime(180 + Math.abs(state.speed) * 4 + rev * 980, t, 0.05);
+    const loud = state.driveMode === "sport" ? 1.45 : 0.5;
+    const vol = state.engineOn ? (0.05 + Math.abs(state.speed) * 0.0011 + rev * (state.driveMode === "sport" ? 0.22 : 0.08)) * loud : 0;
+    audio.master.gain.setTargetAtTime(vol, t, state.driveMode === "sport" ? 0.04 : 0.14);
     if (audio.noise) {
       audio.noise.gain.gain.setTargetAtTime(Math.abs(state.speed) * 0.00035, t, 0.1);
       audio.noise.filter.frequency.setTargetAtTime(500 + Math.abs(state.speed) * 8, t, 0.1);
@@ -291,14 +334,16 @@
     doorOverlay.hidden = false;
     innerDoorBtn.textContent = "Stäng dörren";
     innerDoorBtn.classList.add("warn");
-    keyBtn.hidden = true;
-    beltStation.hidden = true;
-    keyholeWrap.hidden = true;
-    controls.hidden = true;
-    driveNowBtn.hidden = false;
+    driveNowBtn.hidden = true;
+    showCabinControls();
+    if (!state.keyInIgnition && !state.holdingKey) {
+      keyBtn.classList.add("guide");
+      keyBtn.disabled = false;
+      keyCaption.textContent = "Ta upp";
+    }
     updateExitButton();
-    hint.textContent = "Tryck KÖR NU — eller stäng dörren och gör själv.";
-    toast("Tryck KÖR NU för att börja köra!");
+    hint.textContent = "Stäng dörren. Sedan tar du upp nyckeln.";
+    toast("Stäng dörren, ta upp nyckeln och sätt den i hålet.");
     resize();
   }
 
@@ -333,7 +378,6 @@
     exterior.hidden = false;
     viewport.hidden = true;
     cockpit.hidden = true;
-    controls.hidden = true;
     doorOverlay.hidden = true;
     exitCarBtn.hidden = true;
     driveNowBtn.hidden = true;
@@ -363,13 +407,13 @@
         state.phase = "ready";
         showCabinControls();
         driveNowBtn.hidden = false;
-        hint.textContent = "Tryck KÖR NU — eller bälte + nyckel själv.";
-        toast("Dörren stängd. Tryck KÖR NU!");
+        hint.textContent = "Dörren är stängd. Ta upp nyckeln och sätt den i nyckelhålet.";
+        toast("Dörren är stängd. Sätt i nyckeln!");
       } else {
         hint.textContent = "Dörren är stängd.";
         toast("Dörren är stängd.");
         showCabinControls();
-        if (!(state.engineOn && state.belted)) driveNowBtn.hidden = false;
+        driveNowBtn.hidden = true;
       }
       return;
     }
@@ -399,11 +443,12 @@
     const dx = x - camX;
     const dy = y - camY;
     const dz = z - camZ;
-    if (dz <= 1) return null;
-    const scale = FOV / dz;
+    if (dz <= 8) return null;
+    const depth = CAM_DEPTH / (1 + Math.abs(state.speed) * 0.003);
+    const scale = depth / dz;
     return {
       x: w / 2 + scale * dx * (w / 2),
-      y: h / 2 - scale * dy * (h / 2),
+      y: h * 0.43 - scale * dy * (h / 2),
       w: scale * ROAD_W * (w / 2),
       scale,
     };
@@ -420,47 +465,297 @@
   }
 
   function drawSky(w, h, curveLean) {
-    const g = ctx.createLinearGradient(0, 0, 0, h * 0.55);
-    g.addColorStop(0, "#3f8fbf");
-    g.addColorStop(0.55, "#8fc8e6");
-    g.addColorStop(1, "#d5ebf6");
+    const horizon = h * 0.43;
+    const g = ctx.createLinearGradient(0, 0, 0, horizon);
+    g.addColorStop(0, "#4e86b0");
+    g.addColorStop(0.55, "#9ec3d6");
+    g.addColorStop(1, "#d7e4ea");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(255,246,210,.95)";
+
+    const sunX = w * 0.8 - curveLean * 36;
+    const sunY = h * 0.16;
+    const glow = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 90);
+    glow.addColorStop(0, "rgba(255,244,210,0.95)");
+    glow.addColorStop(1, "rgba(255,244,210,0)");
+    ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(w * 0.72 - curveLean * 40, h * 0.16, 34, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 90, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff6d2";
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 26, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(255,255,255,0.88)";
+    const clouds = [
+      [0.12, 0.14, 70],
+      [0.28, 0.22, 48],
+      [0.46, 0.11, 62],
+      [0.62, 0.2, 40],
+    ];
+    for (const [cx, cy, rw] of clouds) {
+      const x = cx * w - curveLean * 24;
+      const y = cy * h;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rw, rw * 0.38, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + rw * 0.55, y + 4, rw * 0.7, rw * 0.32, 0, 0, Math.PI * 2);
+      ctx.ellipse(x - rw * 0.5, y + 6, rw * 0.55, rw * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = "#b7c9d2";
+    ctx.beginPath();
+    ctx.moveTo(0, horizon);
+    for (let i = 0; i <= 16; i++) {
+      const x = (i / 16) * w - curveLean * 18;
+      const peak = horizon - (28 + ((i * 53) % 78)) * (h / 520);
+      ctx.lineTo(x, peak);
+    }
+    ctx.lineTo(w + 40, horizon);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#9eb4c0";
+    ctx.beginPath();
+    ctx.moveTo(0, horizon);
+    for (let i = 0; i <= 10; i++) {
+      const x = (i / 10) * w - curveLean * 10;
+      const peak = horizon - (16 + ((i * 37) % 40)) * (h / 640);
+      ctx.lineTo(x, Math.min(horizon - 4, peak + 18));
+    }
+    ctx.lineTo(w + 20, horizon);
+    ctx.closePath();
     ctx.fill();
   }
 
-  function drawCarSprite(x, y, scale, color) {
-    const bw = 90 * scale;
-    const bh = 42 * scale;
+  function drawCarSprite(x, y, scale, color, oncoming = false, kind = "sedan") {
+    const s = Math.max(0.2, scale);
+    const w = (kind === "suv" ? 102 : kind === "sport" ? 96 : kind === "hatch" ? 86 : 92) * s;
+    const h = (kind === "suv" ? 62 : kind === "sport" ? 42 : kind === "hatch" ? 50 : 52) * s;
     ctx.save();
     ctx.translate(x, y);
-    ctx.fillStyle = "rgba(0,0,0,.28)";
+    ctx.fillStyle = "rgba(0,0,0,.42)";
     ctx.beginPath();
-    ctx.ellipse(0, bh * 0.35, bw * 0.55, bh * 0.18, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, h * 0.52, w * 0.52, h * 0.12, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = color;
+    if (oncoming) drawCarFront(w, h, color, kind, s);
+    else drawCarRear(w, h, color, kind, s);
+    ctx.restore();
+  }
+
+  function drawWheelPair(w, h, s) {
+    for (const side of [-1, 1]) {
+      const wx = side * w * 0.34;
+      const wy = h * 0.28;
+      ctx.fillStyle = "#0a0a0a";
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, w * 0.1, h * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#8a9199";
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, w * 0.045, h * 0.07, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#1a1d22";
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, w * 0.018, h * 0.03, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawCarRear(w, h, color, kind, s) {
+    const top = kind === "suv" ? -h * 0.98 : kind === "sport" ? -h * 0.7 : -h * 0.86;
+    drawWheelPair(w, h, s);
+
+    const body = ctx.createLinearGradient(-w * 0.5, top, w * 0.5, h * 0.3);
+    body.addColorStop(0, shadeColor(color, 55));
+    body.addColorStop(0.35, shadeColor(color, 18));
+    body.addColorStop(0.55, color);
+    body.addColorStop(1, shadeColor(color, -50));
+    ctx.fillStyle = body;
     ctx.beginPath();
-    ctx.moveTo(-bw * 0.5, 0);
-    ctx.lineTo(-bw * 0.42, -bh * 0.35);
-    ctx.lineTo(-bw * 0.1, -bh * 0.55);
-    ctx.lineTo(bw * 0.2, -bh * 0.55);
-    ctx.lineTo(bw * 0.48, -bh * 0.28);
-    ctx.lineTo(bw * 0.5, 0);
+    ctx.moveTo(-w * 0.46, h * 0.22);
+    ctx.quadraticCurveTo(-w * 0.52, h * 0.02, -w * 0.48, -h * 0.12);
+    ctx.lineTo(-w * 0.4, top * 0.55);
+    ctx.quadraticCurveTo(-w * 0.28, top, -w * 0.12, top);
+    ctx.lineTo(w * 0.12, top);
+    ctx.quadraticCurveTo(w * 0.28, top, w * 0.4, top * 0.55);
+    ctx.lineTo(w * 0.48, -h * 0.12);
+    ctx.quadraticCurveTo(w * 0.52, h * 0.02, w * 0.46, h * 0.22);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "rgba(170,210,235,.9)";
-    ctx.fillRect(-bw * 0.08, -bh * 0.5, bw * 0.28, bh * 0.2);
-    ctx.fillStyle = "#ffe9a0";
-    ctx.fillRect(bw * 0.38, -bh * 0.18, bw * 0.08, bh * 0.1);
-    ctx.fillStyle = "#ff4d4d";
-    ctx.fillRect(-bw * 0.48, -bh * 0.16, bw * 0.07, bh * 0.09);
+
+    // Sidoglans
+    const shine = ctx.createLinearGradient(0, top, 0, h * 0.1);
+    shine.addColorStop(0, "rgba(255,255,255,.28)");
+    shine.addColorStop(0.45, "rgba(255,255,255,.05)");
+    shine.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shine;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.3, top + h * 0.04);
+    ctx.lineTo(w * 0.3, top + h * 0.04);
+    ctx.lineTo(w * 0.38, -h * 0.05);
+    ctx.lineTo(-w * 0.38, -h * 0.05);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bakruta
+    const glass = ctx.createLinearGradient(0, top, 0, -h * 0.05);
+    glass.addColorStop(0, "#c8e8f8");
+    glass.addColorStop(0.35, "#4a7a9a");
+    glass.addColorStop(1, "#152838");
+    ctx.fillStyle = glass;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.24, top + h * 0.1);
+    ctx.quadraticCurveTo(0, top + h * 0.02, w * 0.24, top + h * 0.1);
+    ctx.lineTo(w * 0.3, -h * 0.06);
+    ctx.quadraticCurveTo(0, -h * 0.12, -w * 0.3, -h * 0.06);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.4)";
+    ctx.beginPath();
+    ctx.ellipse(-w * 0.08, top + h * 0.12, w * 0.08, h * 0.04, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Speglar
+    ctx.fillStyle = shadeColor(color, -20);
+    ctx.fillRect(-w * 0.52, -h * 0.18, w * 0.07, h * 0.08);
+    ctx.fillRect(w * 0.45, -h * 0.18, w * 0.07, h * 0.08);
+    ctx.fillStyle = "#8ec8e0";
+    ctx.fillRect(-w * 0.51, -h * 0.16, w * 0.04, h * 0.05);
+    ctx.fillRect(w * 0.47, -h * 0.16, w * 0.04, h * 0.05);
+
+    // Bakljus — runda/böjda
+    for (const side of [-1, 1]) {
+      const lx = side * w * 0.38;
+      ctx.fillStyle = "#ff1a1a";
+      ctx.shadowColor = "rgba(255,40,40,.8)";
+      ctx.shadowBlur = 8 * s;
+      ctx.beginPath();
+      ctx.ellipse(lx, -h * 0.02, w * 0.09, h * 0.055, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffb0b0";
+      ctx.beginPath();
+      ctx.ellipse(lx - side * w * 0.02, -h * 0.03, w * 0.04, h * 0.025, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Avgas
+    ctx.fillStyle = "#2a2a2a";
+    ctx.beginPath();
+    ctx.ellipse(-w * 0.18, h * 0.2, w * 0.035, h * 0.03, 0, 0, Math.PI * 2);
+    ctx.ellipse(w * 0.18, h * 0.2, w * 0.035, h * 0.03, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (s > 0.7) {
+      ctx.fillStyle = "#f2efe6";
+      ctx.fillRect(-w * 0.15, h * 0.02, w * 0.3, h * 0.08);
+      ctx.strokeStyle = "#1a3a6e";
+      ctx.lineWidth = Math.max(1, s);
+      ctx.strokeRect(-w * 0.15, h * 0.02, w * 0.3, h * 0.08);
+      ctx.fillStyle = "#1a3a6e";
+      ctx.font = `bold ${Math.max(7, 9 * s)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText("ABC 123", 0, h * 0.085);
+    }
+
+    if (kind === "sport") {
+      ctx.fillStyle = shadeColor(color, -35);
+      ctx.fillRect(-w * 0.28, top - h * 0.07, w * 0.56, h * 0.05);
+      ctx.fillRect(-w * 0.26, top - h * 0.02, w * 0.04, h * 0.08);
+      ctx.fillRect(w * 0.22, top - h * 0.02, w * 0.04, h * 0.08);
+    }
+  }
+
+  function drawCarFront(w, h, color, kind, s) {
+    const top = kind === "suv" ? -h * 0.98 : kind === "sport" ? -h * 0.68 : -h * 0.84;
+    drawWheelPair(w, h, s);
+
+    const body = ctx.createLinearGradient(-w * 0.5, top, w * 0.5, h * 0.3);
+    body.addColorStop(0, shadeColor(color, 60));
+    body.addColorStop(0.4, shadeColor(color, 15));
+    body.addColorStop(0.6, color);
+    body.addColorStop(1, shadeColor(color, -45));
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.46, h * 0.2);
+    ctx.quadraticCurveTo(-w * 0.52, 0, -w * 0.46, -h * 0.08);
+    ctx.lineTo(-w * 0.34, top * 0.5);
+    ctx.quadraticCurveTo(-w * 0.2, top, 0, top);
+    ctx.quadraticCurveTo(w * 0.2, top, w * 0.34, top * 0.5);
+    ctx.lineTo(w * 0.46, -h * 0.08);
+    ctx.quadraticCurveTo(w * 0.52, 0, w * 0.46, h * 0.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Vindruta
+    const glass = ctx.createLinearGradient(0, top, 0, -h * 0.02);
+    glass.addColorStop(0, "#e8f6ff");
+    glass.addColorStop(0.4, "#6aa8c8");
+    glass.addColorStop(1, "#1a3850");
+    ctx.fillStyle = glass;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.22, top + h * 0.12);
+    ctx.quadraticCurveTo(0, top + h * 0.04, w * 0.22, top + h * 0.12);
+    ctx.lineTo(w * 0.28, -h * 0.02);
+    ctx.quadraticCurveTo(0, -h * 0.08, -w * 0.28, -h * 0.02);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.45)";
+    ctx.beginPath();
+    ctx.ellipse(w * 0.06, top + h * 0.1, w * 0.1, h * 0.035, 0.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Grill
     ctx.fillStyle = "#111";
-    ctx.fillRect(-bw * 0.34, -bh * 0.02, bw * 0.14, bh * 0.14);
-    ctx.fillRect(bw * 0.14, -bh * 0.02, bw * 0.14, bh * 0.14);
-    ctx.restore();
+    ctx.fillRect(-w * 0.2, 0, w * 0.4, h * 0.1);
+    ctx.fillStyle = "#3a3a3a";
+    for (let i = 0; i < 6; i++) {
+      ctx.fillRect(-w * 0.17 + i * w * 0.055, h * 0.02, w * 0.02, h * 0.06);
+    }
+
+    // Strålkastare
+    for (const side of [-1, 1]) {
+      const lx = side * w * 0.34;
+      ctx.fillStyle = "#fff8e0";
+      ctx.shadowColor = "rgba(255,240,180,.95)";
+      ctx.shadowBlur = 12 * s;
+      ctx.beginPath();
+      ctx.ellipse(lx, -h * 0.01, w * 0.1, h * 0.07, side * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.ellipse(lx - side * w * 0.02, -h * 0.02, w * 0.04, h * 0.03, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Speglar
+    ctx.fillStyle = shadeColor(color, -15);
+    ctx.fillRect(-w * 0.5, -h * 0.2, w * 0.07, h * 0.09);
+    ctx.fillRect(w * 0.43, -h * 0.2, w * 0.07, h * 0.09);
+  }
+
+  function fogPaint(hex, fog) {
+    const c = hex.replace("#", "");
+    const num = parseInt(c.length === 3 ? c.split("").map((ch) => ch + ch).join("") : c, 16);
+    const r = num >> 16;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    const k = Math.min(0.78, fog * fog * 1.2);
+    return `rgb(${(r + (198 - r) * k) | 0},${(g + (214 - g) * k) | 0},${(b + (220 - b) * k) | 0})`;
+  }
+
+  function shadeColor(hex, amt) {
+    const c = hex.replace("#", "");
+    const num = parseInt(c.length === 3 ? c.split("").map((x) => x + x).join("") : c, 16);
+    let r = (num >> 16) + amt;
+    let g = ((num >> 8) & 0xff) + amt;
+    let b = (num & 0xff) + amt;
+    r = Math.max(0, Math.min(255, r));
+    g = Math.max(0, Math.min(255, g));
+    b = Math.max(0, Math.min(255, b));
+    return `rgb(${r},${g},${b})`;
   }
 
   function polygon(x1, y1, x2, y2, x3, y3, x4, y4, color) {
@@ -484,97 +779,218 @@
 
   function drawRoad(w, h) {
     const base = Math.floor(state.pos / SEG_LEN) % segments.length;
-    const camY = CAM_H + (segments[base].y || 0);
-    const camZ = 0;
-    const playerWorldX = state.playerX * ROAD_W;
+    const baseY = segments[base].y || 0;
+    const camY = CAM_H + baseY;
+    const playerWorldX = state.playerX * ROAD_W + state.steer * 1.7;
     let x = 0;
     let dx = 0;
-    let maxY = h;
-    const lean = state.curve * 0.015 + state.steer * 0.0004;
+    const lean = state.curve * 0.8 + state.steer * 0.0011;
+    const roll = Math.max(-0.07, Math.min(0.07, state.steer * 0.00013));
+    const shake = state.bump > 0 ? (Math.random() - 0.5) * 18 * state.bump : 0;
+    const pitchMul = state.driveMode === "sport" ? 1.5 : 0.35;
+    const pitch = ((state.input.up ? -14 : 0) + (state.input.down ? 10 : 0)) * pitchMul;
+
+    ctx.save();
+    ctx.translate(w / 2 + shake, h * 0.58 + shake * 0.4);
+    ctx.rotate(roll);
+    ctx.translate(-w / 2, -h * 0.58 + pitch);
 
     drawSky(w, h, lean);
-    ctx.fillStyle = "#3d6b38";
-    ctx.fillRect(0, h * 0.48, w, h * 0.52);
 
     const pts = [];
-    for (let n = 0; n < DRAW_DIST; n++) {
+    const byN = [];
+    for (let n = 1; n < DRAW_DIST; n++) {
       const seg = segments[(base + n) % segments.length];
       const segPrev = segments[(base + n - 1 + segments.length) % segments.length];
-      const p1 = project(playerWorldX - x, camY - segPrev.y, camZ + (n - 1) * SEG_LEN - (state.pos % SEG_LEN), playerWorldX, camY, camZ, w, h);
-      const p2 = project(playerWorldX - x, camY - seg.y, camZ + n * SEG_LEN - (state.pos % SEG_LEN), playerWorldX, camY, camZ, w, h);
+      const x1 = x;
       x += dx;
       dx += seg.curve;
+      const z1 = (n - 1) * SEG_LEN - (state.pos % SEG_LEN);
+      const z2 = n * SEG_LEN - (state.pos % SEG_LEN);
+      const p1 = project(-x1, segPrev.y, z1, playerWorldX, camY, 0, w, h);
+      const p2 = project(-x, seg.y, z2, playerWorldX, camY, 0, w, h);
       if (!p1 || !p2) continue;
-      pts.push({ p1, p2, n, alt: ((base + n) % 2) === 0 });
+      const fog = n / DRAW_DIST;
+      pts.push({ p1, p2, n, alt: ((base + n) % 2) === 0, fog });
+      byN[n] = p2;
     }
 
-    for (let i = pts.length - 1; i >= 0; i--) {
-      const { p1, p2, alt, n } = pts[i];
-      if (p2.y >= maxY) continue;
-      const grass = alt ? "#3a6a36" : "#345f31";
-      const rumble = alt ? "#d9dee6" : "#c0392b";
-      const road = alt ? "#3a4048" : "#323840";
+    // Nära först, så backar mot horisonten. Backkrön döljer vägen bakom.
+    let clipY = h + 4;
+    for (let i = 0; i < pts.length; i++) {
+      const { p1, p2, alt, n, fog } = pts[i];
+      if (p1.y >= clipY) continue;
+      if (p2.y >= p1.y) continue;
+
+      const grass = fogPaint(alt ? "#4e7344" : "#45683c", fog);
+      const shoulder = fogPaint(alt ? "#7a7264" : "#6a6356", fog);
+      const road = fogPaint(alt ? "#3c444c" : "#353c44", fog);
+      const paint = fogPaint("#f3f0e6", fog);
+
       polygon(0, p1.y, w, p1.y, w, p2.y, 0, p2.y, grass);
-      segmentBand(p1, p2, 1.15, 1.0, rumble);
-      segmentBand(p1, p2, 1.0, 0, road);
-      if (alt) {
-        segmentBand(p1, p2, 0.04, 0, "#f2f4f7");
-        segmentBand(p1, p2, 0.02, -0.52, "rgba(255,255,255,.75)");
-        segmentBand(p1, p2, 0.02, 0.52, "rgba(255,255,255,.75)");
-      }
-      if (n % 3 === 0) {
-        const s = p2.scale;
+      segmentBand(p1, p2, 1.16, 0, shoulder);
+      segmentBand(p1, p2, 1, 0, road);
+      segmentBand(p1, p2, 0.014, -0.97, paint);
+      segmentBand(p1, p2, 0.014, 0.97, paint);
+      if (alt) segmentBand(p1, p2, 0.012, 0, paint);
+
+      const s = Math.max(0.35, p2.w / 240);
+      if (n % 5 === 0 && fog < 0.85) {
         for (const side of [-1, 1]) {
-          const px = p2.x + side * p2.w * 1.08;
-          ctx.fillStyle = "#cfd6de";
-          ctx.fillRect(px - 2 * s * 40, p2.y - 70 * s * 40, 4 * s * 40, 70 * s * 40);
-          ctx.fillStyle = "#e74c3c";
-          ctx.fillRect(px - 6 * s * 40, p2.y - 78 * s * 40, 12 * s * 40, 10 * s * 40);
+          const px = p2.x + side * p2.w * 1.16;
+          const poleH = 34 * s;
+          ctx.fillStyle = "#dfe5ec";
+          ctx.fillRect(px - Math.max(1, s * 0.7), p2.y - poleH, Math.max(2, s * 1.3), poleH);
+          ctx.fillStyle = "#f1c40f";
+          ctx.fillRect(px - 3.2 * s, p2.y - poleH - 2 * s, 6.4 * s, 3 * s);
         }
       }
-      if (n % 5 === 0) {
-        const s = p2.scale * 40;
+      if (n % 7 === 0 && fog < 0.8) {
         for (const side of [-1, 1]) {
-          const px = p2.x + side * p2.w * (1.35 + (n % 7) * 0.03);
-          ctx.fillStyle = "#4a321f";
-          ctx.fillRect(px - 3 * s, p2.y - 10 * s, 6 * s, 18 * s);
-          ctx.fillStyle = "#1e5a2a";
+          const px = p2.x + side * p2.w * (1.55 + (n % 3) * 0.08);
+          ctx.fillStyle = "#5c4632";
+          ctx.fillRect(px - 1.1 * s, p2.y - 10 * s, 2.2 * s, 10 * s);
+          ctx.fillStyle = n % 14 === 0 ? "#2f6a3c" : "#245832";
           ctx.beginPath();
-          ctx.moveTo(px, p2.y - 55 * s);
-          ctx.lineTo(px + 22 * s, p2.y - 8 * s);
-          ctx.lineTo(px - 22 * s, p2.y - 8 * s);
-          ctx.closePath();
+          ctx.ellipse(px, p2.y - 16 * s, 11 * s, 8 * s, 0, 0, Math.PI * 2);
+          ctx.ellipse(px - 6 * s, p2.y - 12 * s, 8 * s, 7 * s, 0, 0, Math.PI * 2);
+          ctx.ellipse(px + 6 * s, p2.y - 13 * s, 8 * s, 6.5 * s, 0, 0, Math.PI * 2);
           ctx.fill();
         }
       }
-      maxY = p2.y;
+      if (n % 13 === 0 && fog < 0.7) {
+        const side = n % 26 === 0 ? -1 : 1;
+        const px = p2.x + side * p2.w * 2.05;
+        const bw = 26 * s;
+        const bh = 18 * s;
+        ctx.fillStyle = "rgba(0,0,0,0.18)";
+        ctx.fillRect(px - bw * 0.4, p2.y - 3 * s, bw * 0.9, 4 * s);
+        ctx.fillStyle = side < 0 ? "#d9d3c4" : "#e7d7c4";
+        ctx.fillRect(px - bw / 2, p2.y - bh, bw, bh);
+        ctx.fillStyle = "#8d3b32";
+        ctx.beginPath();
+        ctx.moveTo(px - bw * 0.62, p2.y - bh + 1);
+        ctx.lineTo(px, p2.y - bh - 12 * s);
+        ctx.lineTo(px + bw * 0.62, p2.y - bh + 1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#9fd0ea";
+        ctx.fillRect(px - bw * 0.18, p2.y - bh * 0.72, bw * 0.36, bh * 0.32);
+      }
+      segmentBand(p1, p2, 0.01, -1.16, "#d5dbe3");
+      segmentBand(p1, p2, 0.01, 1.16, "#d5dbe3");
+      clipY = p1.y;
     }
 
-    if (state.phase === "drive" && state.speed < 12) {
-      ctx.fillStyle = "rgba(70, 220, 130, 0.8)";
-      ctx.beginPath();
-      ctx.moveTo(w * 0.5, h * 0.58);
-      ctx.lineTo(w * 0.54, h * 0.64);
-      ctx.lineTo(w * 0.515, h * 0.64);
-      ctx.lineTo(w * 0.515, h * 0.7);
-      ctx.lineTo(w * 0.485, h * 0.7);
-      ctx.lineTo(w * 0.485, h * 0.64);
-      ctx.lineTo(w * 0.46, h * 0.64);
-      ctx.closePath();
-      ctx.fill();
-    }
-
+    const visible = [];
     for (const car of state.traffic) {
       const rel = car.z - state.pos / SEG_LEN;
-      const z = ((rel % segments.length) + segments.length) % segments.length;
-      if (z <= 1 || z > DRAW_DIST - 2) continue;
-      const approx = pts[Math.min(pts.length - 1, Math.floor(z))];
-      if (!approx) continue;
-      const p = approx.p2;
-      drawCarSprite(p.x + car.x * p.w, p.y, p.scale * 42, car.color);
+      let z = ((rel % segments.length) + segments.length) % segments.length;
+      if (z < 4 || z > DRAW_DIST - 4) continue;
+      const p = byN[Math.floor(z)];
+      if (!p || p.y < 0 || p.y > h) continue;
+      visible.push({ car, z, p });
+    }
+    visible.sort((a, b) => b.z - a.z);
+    for (const { car, z, p } of visible) {
+      const nearBoost = z < 12 ? 1.55 : z < 28 ? 1.25 : 1;
+      const scale = Math.min(2.1, Math.max(0.22, (p.w / 360) * nearBoost));
+      drawCarSprite(
+        p.x + car.x * p.w * 0.85,
+        p.y,
+        scale,
+        car.color,
+        !!car.oncoming,
+        car.kind || "sedan"
+      );
     }
 
+    const haze = ctx.createLinearGradient(0, h * 0.3, 0, h * 0.5);
+    haze.addColorStop(0, "rgba(198,214,220,0)");
+    haze.addColorStop(1, "rgba(198,214,220,0.55)");
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, h * 0.3, w, h * 0.22);
+
     state.curve = segments[base].curve;
+    ctx.restore();
+    drawPlayerHood(w, h);
+  }
+
+  function drawPlayerHood(w, h) {
+    const top = h * 0.76;
+    const paint = ctx.createLinearGradient(w * 0.5, top, w * 0.5, h);
+    paint.addColorStop(0, "#e02a36");
+    paint.addColorStop(0.12, "#b41824");
+    paint.addColorStop(0.4, "#7a1018");
+    paint.addColorStop(0.75, "#3a080c");
+    paint.addColorStop(1, "#180406");
+    ctx.fillStyle = paint;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.16, top + 10);
+    ctx.quadraticCurveTo(w * 0.5, top - h * 0.03, w * 0.84, top + 10);
+    ctx.lineTo(w * 1.05, h + 4);
+    ctx.lineTo(-w * 0.05, h + 4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Huvlinjer
+    ctx.strokeStyle = "rgba(0,0,0,.28)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.28, top + 18);
+    ctx.quadraticCurveTo(w * 0.32, h * 0.9, w * 0.3, h);
+    ctx.moveTo(w * 0.72, top + 18);
+    ctx.quadraticCurveTo(w * 0.68, h * 0.9, w * 0.7, h);
+    ctx.stroke();
+
+    // Glans i mitten
+    const gleam = ctx.createLinearGradient(w * 0.5, top, w * 0.5, h);
+    gleam.addColorStop(0, "rgba(255,255,255,.35)");
+    gleam.addColorStop(0.4, "rgba(255,255,255,.08)");
+    gleam.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gleam;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.46, top + 12);
+    ctx.lineTo(w * 0.54, top + 12);
+    ctx.lineTo(w * 0.56, h);
+    ctx.lineTo(w * 0.44, h);
+    ctx.closePath();
+    ctx.fill();
+
+    // Vindrutebas / svart list
+    ctx.fillStyle = "rgba(10,8,8,.7)";
+    ctx.beginPath();
+    ctx.moveTo(w * 0.22, top + 4);
+    ctx.quadraticCurveTo(w * 0.5, top - 4, w * 0.78, top + 4);
+    ctx.lineTo(w * 0.76, top + 14);
+    ctx.quadraticCurveTo(w * 0.5, top + 8, w * 0.24, top + 14);
+    ctx.closePath();
+    ctx.fill();
+
+    for (const side of [-1, 1]) {
+      const cx = w * (0.5 + side * 0.29);
+      const cy = top + (h - top) * 0.58;
+      if (state.engineOn) {
+        const beam = ctx.createRadialGradient(cx, cy, 2, cx, cy - 36, 80);
+        beam.addColorStop(0, "rgba(255,240,200,.55)");
+        beam.addColorStop(1, "rgba(255,236,190,0)");
+        ctx.fillStyle = beam;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - 12, 60, 32, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const lamp = ctx.createRadialGradient(cx - 4, cy - 3, 1, cx, cy, w * 0.035);
+      lamp.addColorStop(0, state.engineOn ? "#fff" : "#fff8e8");
+      lamp.addColorStop(0.55, state.engineOn ? "#ffe08a" : "#d8d0b8");
+      lamp.addColorStop(1, "#6a6450");
+      ctx.fillStyle = lamp;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, w * 0.032, h * 0.02, side * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#1a0c0e";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   }
 
   function drawMirrorView(mctx, mw, mh, mode) {
@@ -753,7 +1169,7 @@
       return;
     }
 
-    if (!state.belted) {
+    if (!state.belted && state.gear !== "N") {
       state.speed = Math.max(0, state.speed - 40 * dt);
       hint.textContent = "Sätt på bilbältet innan du kör!";
       setEngineSound();
@@ -769,19 +1185,24 @@
       state.speed = Math.max(0, state.speed - 28 * dt);
       state.rpm = 0;
       setEngineSound();
-      hint.textContent = "Motorn är sönder! Tryck Laga motorn.";
+      hint.textContent = "Motorn är sönder! Tryck Byt motor.";
       return;
     }
 
     // Maxfart per växel (interna enheter) + acceleration
     // 1:an kan övervarva förbi "säker" fart — sönder vid 75 km/h
-    const gearMax = { R: 12, N: 0, 1: 22, 2: 22, 3: 30, 4: 38, 5: 46, 6: 55 };
-    const gearSafe = { R: 12, N: 0, 1: 14, 2: 22, 3: 30, 4: 38, 5: 46, 6: 55 };
-    const gearAccel = { R: 16, N: 0, 1: 32, 2: 26, 3: 22, 4: 18, 5: 15, 6: 12 };
+    const sport = state.driveMode === "sport";
+    const speedMul = sport ? 1.22 : 0.78;
+    const accelMul = sport ? 1.45 : 0.62;
+    // Interna enheter: km/h = speed * 3.6  →  växel 6 max 300 km/h
+    const gearMax = { R: 12, N: 0, 1: 22, 2: 28, 3: 40, 4: 55, 5: 70, 6: 300 / 3.6 };
+    const gearSafe = { R: 12, N: 0, 1: 14, 2: 28, 3: 40, 4: 55, 5: 70, 6: 280 / 3.6 };
+    const gearAccel = { R: 16, N: 0, 1: 32, 2: 26, 3: 22, 4: 18, 5: 16, 6: 14 };
     const inGear = state.gear !== "N";
-    const maxForGear = gearMax[state.gear] || 0;
-    const safeForGear = gearSafe[state.gear] || 0;
-    const baseAccel = gearAccel[state.gear] || 0;
+    const topMul = state.gear === "6" ? 1 : speedMul;
+    const maxForGear = (gearMax[state.gear] || 0) * topMul;
+    const safeForGear = (gearSafe[state.gear] || 0) * topMul;
+    const baseAccel = (gearAccel[state.gear] || 0) * accelMul;
 
     let power = 0;
     if (gas && inGear) {
@@ -798,7 +1219,7 @@
       }
     }
 
-    const brakeForce = brake ? 32 : 0;
+    const brakeForce = brake ? (sport ? 44 : 18) : 0;
     const drag = 1.2 + Math.abs(state.speed) * 0.04 + (Math.abs(state.playerX) > 0.95 ? 8 : 0);
     // Motorbroms bara när man INTE gasar
     const engineBrake = inGear && !gas ? 2.5 + Math.max(0, state.gearIndex) * 0.55 : 0;
@@ -820,7 +1241,7 @@
       if (gas && inGear && state.speed < prev) {
         state.speed = prev + Math.max(0, (baseAccel * 0.15 - drag) * dt);
       }
-      state.speed = Math.max(0, Math.min(55, state.speed));
+      state.speed = Math.max(0, Math.min(maxForGear || 300 / 3.6, state.speed));
     }
 
     const kmh = Math.abs(state.speed) * 3.6;
@@ -833,7 +1254,8 @@
 
     // RPM från växel + gas
     if (state.gear === "N") {
-      state.rpm = 900 + (gas ? 2200 : 0);
+      const bounce = gas ? Math.sin(performance.now() / 70) * 380 * state.rev : 0;
+      state.rpm = 850 + state.rev * 6500 + bounce;
     } else if (state.gear === "R") {
       state.rpm = 900 + Math.abs(state.speed) * 70 + (gas ? 400 : 0);
     } else {
@@ -849,7 +1271,8 @@
     if (state.input.right) turn += 1;
 
     const speedFactor = 1 / (1 + state.speed * 0.04);
-    state.steerRate += (turn * 280 * speedFactor - state.steer * 2.5 - state.steerRate * 5.5) * dt;
+    const steerGain = sport ? 380 : 180;
+    state.steerRate += (turn * steerGain * speedFactor - state.steer * (sport ? 2.2 : 3.4) - state.steerRate * (sport ? 4.5 : 7)) * dt;
     state.steer += state.steerRate * dt;
     state.steer = Math.max(-480, Math.min(480, state.steer));
     if (turn === 0) {
@@ -857,8 +1280,8 @@
       state.steerRate *= 1 - Math.min(1, dt * 3.5);
     }
 
-    const pull = state.curve * 0.0009 * state.speed;
-    state.playerX += (state.steer / 900) * state.speed * dt * 0.55 - pull * dt;
+    const pull = state.curve * 0.0011 * state.speed;
+    state.playerX += (state.steer / 1200) * state.speed * dt * (sport ? 0.5 : 0.22) - pull * dt;
     if (Math.abs(state.playerX) > 1.05) {
       state.speed *= 1 - dt * 0.7;
       state.playerX = Math.sign(state.playerX) * 1.05;
@@ -871,13 +1294,6 @@
     state.mapX += Math.sin(state.heading) * move;
     state.mapZ += Math.cos(state.heading) * move;
 
-    // Håll dig nära vägarna (oval + kors) — annars grus/saktare
-    const off = nearestRoadDist(state.mapX, state.mapZ);
-    if (off > 18) {
-      state.speed *= 1 - dt * 1.2;
-      hint.textContent = "Du är utanför vägen! Sväng tillbaka till kartans väg.";
-    }
-
     // Gränser
     state.mapX = Math.max(-170, Math.min(170, state.mapX));
     state.mapZ = Math.max(-120, Math.min(120, state.mapZ));
@@ -886,11 +1302,42 @@
     state.distance += Math.abs(state.speed) * dt;
     state.fuel = Math.max(0.05, state.fuel - dt * 0.0015 * (0.4 + state.speed / 40));
 
+    const playerSeg = state.pos / SEG_LEN;
     for (const car of state.traffic) {
       car.z += (car.speed * dt * 55) / SEG_LEN;
-      if (car.z * SEG_LEN < state.pos - 40 * SEG_LEN) {
-        car.z = state.pos / SEG_LEN + 80 + Math.random() * 60;
-        car.x = Math.random() > 0.5 ? 0.42 : -0.42;
+      let rel = car.z - playerSeg;
+      // Håll bilar synliga framför / mötande
+      if (car.oncoming) {
+        if (rel < -5) {
+          car.z = playerSeg + 50 + Math.random() * 90;
+          car.x = -0.46;
+          car.speed = -(18 + Math.random() * 14);
+        }
+      } else if (rel < -12 || rel > DRAW_DIST + 10) {
+        car.z = playerSeg + 16 + Math.random() * 90;
+        car.x = 0.46;
+        car.speed = 12 + Math.random() * 28;
+        car.oncoming = false;
+        car.kind = carKinds[Math.floor(Math.random() * carKinds.length)];
+        car.color = carColors[Math.floor(Math.random() * carColors.length)];
+      }
+    }
+
+    if (state.hitCd > 0) state.hitCd -= dt;
+    else if (Math.abs(state.speed) > 2) {
+      for (const car of state.traffic) {
+        let rel = car.z - playerSeg;
+        rel = ((rel % segments.length) + segments.length) % segments.length;
+        if (rel > segments.length / 2) rel -= segments.length;
+        if (rel > 0.35 && rel < 2.6 && Math.abs(car.x - state.playerX) < 0.2) {
+          state.speed *= 0.42;
+          state.bump = 1;
+          state.hitCd = 0.85;
+          playBump();
+          hint.textContent = "Krock! Sväng undan och gasa igen.";
+          toast("Du körde in i en bil!", 1600);
+          break;
+        }
       }
     }
 
@@ -901,13 +1348,17 @@
     setEngineSound();
 
     if (state.gear === "N" && gas) {
-      hint.textContent = "Du är i N — tryck E för 1:ans växel";
+      hint.textContent = "REVAR! Släpp gasen och tryck E för 1:an när du vill köra";
+    } else if (state.gear === "N" && state.engineOn) {
+      hint.textContent = state.hasRevved
+        ? "Snygg rev! Tryck E för 1:an, sedan gasa för att köra"
+        : "Håll W för att varva motorn";
     } else if (state.rpm > 6200 && state.gearIndex > 0 && state.gearIndex < 6) {
       hint.textContent = "Högt varv! Tryck E för att växla upp";
     } else if (state.gearIndex >= 4 && state.speed < 5 && gas) {
       hint.textContent = "Lite hög växel — Q växlar ner om det känns segt";
     } else if (Math.abs(state.speed) < 2 && !gas) {
-      hint.textContent = "Gas ▲ / W · E upp · Q ner";
+      hint.textContent = "W gas · S broms · A/D sväng · E upp · Q ner";
     } else if (state.playerX < 0.05) {
       hint.textContent = "Du är för långt åt vänster — håll dig till höger ▶";
     } else if (state.playerX > 0.85) {
@@ -999,7 +1450,8 @@
     state.input.down = false;
     state.input.left = false;
     state.input.right = false;
-    controls.hidden = true;
+    state.holdingEngine = false;
+    state.engineSwap = "remove";
     driveNowBtn.hidden = true;
     repairBtn.hidden = false;
     app.classList.add("engine-broken");
@@ -1008,29 +1460,113 @@
     if (audio.master && audio.ctx) {
       audio.master.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.05);
     }
-    hint.textContent = "BOOM! Motorn gick sönder i 1:an. Laga motorn.";
-    toast("Motorn gick sönder! (75 km/h i växel 1)", 4000);
+    hint.textContent = "BOOM! Motorn gick sönder. Tryck Byt motor.";
+    toast("Motorn gick sönder! Du måste byta motor.", 4000);
+  }
+
+  function openEngineBay() {
+    if (!state.engineBroken) return;
+    if (state.engineSwap === "idle") state.engineSwap = "remove";
+    engineBay.hidden = false;
+    syncEngineBayUI();
+    hint.textContent = "Ta ur den sönder motorn, ta en ny och sätt i.";
+    toast("Öppna huven. Byt motorn.");
+  }
+
+  function syncEngineBayUI() {
+    const step = state.engineSwap;
+    brokenEngine.hidden = step !== "remove";
+    engineEmpty.hidden = !(step === "pickNew" || step === "holdNew");
+    fittedEngine.hidden = step !== "fitted";
+    newEngineBtn.hidden = step !== "pickNew";
+    engineDoneBtn.hidden = step !== "fitted";
+    engineSlot.classList.toggle("ready", step === "holdNew");
+    app.classList.toggle("holding-engine", state.holdingEngine);
+    if (heldEngine) heldEngine.hidden = !state.holdingEngine;
+
+    if (step === "remove") {
+      engineBayHint.textContent = "Tryck på den sönder motorn för att ta ur den.";
+    } else if (step === "pickNew") {
+      engineBayHint.textContent = "Bra. Ta nu den nya motorn.";
+    } else if (step === "holdNew") {
+      engineBayHint.textContent = "Håll den nya motorn och släpp den i motorrummet.";
+    } else if (step === "fitted") {
+      engineBayHint.textContent = "Ny motor sitter i. Stäng huven.";
+    }
+  }
+
+  function removeBrokenEngine() {
+    if (state.engineSwap !== "remove") return;
+    state.engineSwap = "pickNew";
+    syncEngineBayUI();
+    toast("Du tog ur den sönder motorn.");
+    hint.textContent = "Ta den nya motorn.";
+  }
+
+  function pickNewEngine(clientX, clientY) {
+    if (state.engineSwap !== "pickNew" && state.engineSwap !== "holdNew") return;
+    state.holdingEngine = true;
+    state.engineSwap = "holdNew";
+    syncEngineBayUI();
+    moveHeldEngine(clientX ?? window.innerWidth * 0.5, clientY ?? window.innerHeight * 0.55);
+    toast("Du håller den nya motorn. Sätt den i motorrummet.");
+    hint.textContent = "Dra den nya motorn till det tomma motorrummet.";
+  }
+
+  function moveHeldEngine(clientX, clientY) {
+    if (!heldEngine || heldEngine.hidden) return;
+    heldEngine.style.left = `${clientX}px`;
+    heldEngine.style.top = `${clientY}px`;
+  }
+
+  function isOverEngineSlot(clientX, clientY) {
+    const r = engineSlot.getBoundingClientRect();
+    const pad = 20;
+    return (
+      clientX >= r.left - pad &&
+      clientX <= r.right + pad &&
+      clientY >= r.top - pad &&
+      clientY <= r.bottom + pad
+    );
+  }
+
+  function fitNewEngine() {
+    if (!state.holdingEngine || state.engineSwap !== "holdNew") return;
+    state.holdingEngine = false;
+    state.engineSwap = "fitted";
+    syncEngineBayUI();
+    toast("Ny motor sitter i!");
+    hint.textContent = "Tryck Klart — stäng huven.";
   }
 
   function repairEngine() {
     if (!state.engineBroken) return;
+    if (state.engineSwap !== "fitted") {
+      openEngineBay();
+      return;
+    }
     state.engineBroken = false;
     state.keyInIgnition = false;
     state.holdingKey = false;
+    state.holdingEngine = false;
     state.engineOn = false;
     state.speed = 0;
     state.rpm = 0;
     state.gearIndex = 0;
+    state.engineSwap = "idle";
     syncGearLabel();
     repairBtn.hidden = true;
+    engineBay.hidden = true;
+    if (heldEngine) heldEngine.hidden = true;
     app.classList.remove("engine-broken");
+    app.classList.remove("holding-engine");
     engineLight.classList.remove("on");
     keyBtn.disabled = false;
     keyCaption.textContent = "Ta upp bilnyckel";
     updateKeyholeUI();
-    driveNowBtn.hidden = false;
-    hint.textContent = "Motorn är lagad. Starta igen med nyckel eller KÖR NU.";
-    toast("Motorn är lagad! Du kan köra igen.");
+    driveNowBtn.hidden = true;
+    hint.textContent = "Motor bytt! Ta upp nyckeln och starta igen.";
+    toast("Du bytte motorn! Starta bilen igen.");
   }
 
   function updateUI() {
@@ -1038,11 +1574,12 @@
     const kmh = Math.round(Math.abs(state.speed) * 3.6);
     speedEl.textContent = String(kmh);
     steering.style.transform = `rotate(${state.steer * 0.2}deg)`;
-    const rpmAngle = -120 + Math.min(240, (state.rpm / 5000) * 240);
+    const rpmAngle = -120 + Math.min(240, (state.rpm / 8000) * 240);
     rpmNeedle.setAttribute("transform", `rotate(${rpmAngle} 50 50)`);
     const fuelAngle = -110 + state.fuel * 220;
     fuelNeedle.setAttribute("transform", `rotate(${fuelAngle} 50 50)`);
     engineLight.classList.toggle("on", state.engineBroken || (state.engineOn && state.rpm > 4200));
+    app.classList.toggle("engine-on", state.engineOn);
   }
 
   function render() {
@@ -1058,7 +1595,7 @@
     keyBtn.hidden = false;
     keyBtn.disabled = false;
     keyholeWrap.hidden = false;
-    driveNowBtn.hidden = state.phase === "drive" && state.engineOn;
+    driveNowBtn.hidden = true;
     updateBeltUI();
     updateKeyholeUI();
   }
@@ -1103,11 +1640,10 @@
     keyCaption.textContent = "I nyckelhålet";
     keyholeWrap.hidden = false;
     beltStation.hidden = false;
-    controls.hidden = false;
     driveNowBtn.hidden = true;
 
     setEngineSound();
-    hint.textContent = "Gas ▲ eller W · Sväng ◀▶ · E upp · Q ner";
+    hint.textContent = "W gas · A/D sväng · E upp · Q ner";
     toast("Du kör! Tryck gas ▲ eller W", 3500);
   }
 
@@ -1116,6 +1652,8 @@
     unbelt.hidden = !state.belted;
     buckle.classList.toggle("show", true);
     buckle.classList.toggle("locked", state.belted);
+    const beltVis = document.getElementById("seatbeltVisual");
+    if (beltVis) beltVis.hidden = !state.belted;
   }
 
   function updateKeyholeUI() {
@@ -1124,16 +1662,36 @@
     slot.classList.toggle("turned", state.keyInIgnition);
     keyInHole.hidden = !state.keyInIgnition;
     keyOut.hidden = !state.keyInIgnition;
+    app.classList.toggle("holding-key", state.holdingKey && !state.keyInIgnition);
+    keyBtn.classList.toggle("holding-empty", state.holdingKey && !state.keyInIgnition);
+    if (heldKey) heldKey.hidden = !(state.holdingKey && !state.keyInIgnition);
     if (state.keyInIgnition) {
       keyholeLabel.textContent = "Nyckel i tändningen";
     } else if (state.holdingKey) {
-      keyholeLabel.textContent = "Sätt i nyckeln här";
+      keyholeLabel.textContent = "Släpp nyckeln här";
     } else {
       keyholeLabel.textContent = "Nyckelhål";
     }
   }
 
-  function pickUpKey() {
+  function moveHeldKey(clientX, clientY) {
+    if (!heldKey || heldKey.hidden) return;
+    heldKey.style.left = `${clientX}px`;
+    heldKey.style.top = `${clientY}px`;
+  }
+
+  function isOverKeyhole(clientX, clientY) {
+    const r = slot.getBoundingClientRect();
+    const pad = 18;
+    return (
+      clientX >= r.left - pad &&
+      clientX <= r.right + pad &&
+      clientY >= r.top - pad &&
+      clientY <= r.bottom + pad
+    );
+  }
+
+  function pickUpKey(clientX, clientY) {
     if (state.doorAjar) {
       toast("Stäng dörren först!");
       return;
@@ -1148,12 +1706,15 @@
     audio.ctx?.resume();
     state.holdingKey = true;
     if (!state.engineOn) state.phase = "insert";
-    keyBtn.disabled = true;
-    keyCaption.textContent = "I handen";
-    controls.hidden = true;
+    keyBtn.disabled = false;
+    keyBtn.classList.remove("guide");
+    keyCaption.textContent = "Håller";
     updateKeyholeUI();
-    hint.textContent = "Sätt i nyckeln i nyckelhålet och vrid om";
-    toast("Du har bilnyckeln. Sätt den i nyckelhålet.");
+    const x = clientX ?? window.innerWidth * 0.55;
+    const y = clientY ?? window.innerHeight * 0.72;
+    moveHeldKey(x, y);
+    hint.textContent = "Håll nyckeln och dra den till nyckelhålet";
+    toast("Du håller bilnyckeln. Dra den till nyckelhålet.");
   }
 
   function startEngine() {
@@ -1173,28 +1734,69 @@
 
     ensureAudio();
     audio.ctx?.resume();
+    playStarter();
     state.engineOn = true;
     state.holdingKey = false;
     state.keyInIgnition = true;
+    state.gearIndex = 0;
+    state.phase = "drive";
+    state.rpm = 850;
+    syncGearLabel();
     keyCaption.textContent = "I nyckelhålet";
     keyBtn.disabled = true;
+    keyBtn.classList.remove("guide");
+    keyBtn.classList.remove("holding-empty");
+    if (heldKey) heldKey.hidden = true;
+    app.classList.remove("holding-key");
     updateKeyholeUI();
+    driveNowBtn.hidden = true;
+    beltStation.hidden = false;
+    updateBeltUI();
     setEngineSound();
+    hint.textContent = "Motorn är igång! Håll W för att varva";
+    toast("Du satte i nyckeln. Håll W för att varva!", 3200);
+  }
 
-    if (!state.belted) {
-      state.phase = "belt";
-      driveNowBtn.hidden = false;
-      hint.textContent = "Sätt på bilbältet — eller tryck KÖR NU";
-      toast("Nyckeln sitter i. Sätt på bilbältet!");
-    } else {
-      state.phase = "drive";
-      state.gearIndex = 1;
-      syncGearLabel();
-      controls.hidden = false;
-      driveNowBtn.hidden = true;
-      hint.textContent = "Gas ▲ / W · E upp · Q ner";
-      toast("Motorn igång! Kör!");
+  function playStarter() {
+    ensureAudio();
+    if (!audio.ctx) return;
+    const t = audio.ctx.currentTime;
+    for (let i = 0; i < 5; i++) {
+      const o = audio.ctx.createOscillator();
+      const g = audio.ctx.createGain();
+      const f = audio.ctx.createBiquadFilter();
+      o.type = "sawtooth";
+      f.type = "lowpass";
+      f.frequency.value = 260;
+      o.connect(f);
+      f.connect(g);
+      g.connect(audio.sfx || audio.ctx.destination);
+      const start = t + i * 0.13;
+      o.frequency.setValueAtTime(32 + i * 7, start);
+      o.frequency.linearRampToValueAtTime(86 + i * 9, start + 0.1);
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.22, start + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.12);
+      o.start(start);
+      o.stop(start + 0.13);
     }
+  }
+
+  function updateRev(dt) {
+    const canRev = state.engineOn && !state.engineBroken && state.phase === "drive";
+    const flooring = canRev && state.input.up;
+    const target = flooring ? (state.gear === "N" ? 1 : 0.28) : 0;
+    const rate = state.driveMode === "sport"
+      ? (target > state.rev ? 10 : 5)
+      : (target > state.rev ? 2.6 : 1.6);
+    state.rev += (target - state.rev) * Math.min(1, dt * rate);
+    if (state.rev < 0.01) state.rev = 0;
+    if (state.bump > 0) state.bump = Math.max(0, state.bump - dt * 1.7);
+    if (state.gear === "N" && state.rev > 0.7) state.hasRevved = true;
+
+    const shaking = state.gear === "N" && state.rev > 0.2;
+    app.classList.toggle("revving", shaking);
+    if (revExhaust) revExhaust.hidden = !shaking;
   }
 
   function takeOutKey() {
@@ -1217,9 +1819,10 @@
     state.input.left = false;
     state.input.right = false;
 
-    controls.hidden = true;
     keyBtn.disabled = false;
-    keyCaption.textContent = "I handen — lägg undan?";
+    keyCaption.textContent = "Håller — lägg undan?";
+    updateKeyholeUI();
+    moveHeldKey(window.innerWidth * 0.55, window.innerHeight * 0.72);
     updateKeyholeUI();
     updateExitButton();
     setEngineSound();
@@ -1260,9 +1863,8 @@
       state.phase = "drive";
       if (state.gearIndex <= 0) state.gearIndex = 1;
       syncGearLabel();
-      controls.hidden = false;
       driveNowBtn.hidden = true;
-      hint.textContent = "Gas ▲ / W · E upp · Q ner";
+      hint.textContent = "W gas · S broms · A/D sväng · E upp · Q ner";
     } else {
       driveNowBtn.hidden = false;
       hint.textContent = "Bra! Ta upp nyckeln och sätt i — eller KÖR NU";
@@ -1280,7 +1882,6 @@
     updateExitButton();
     if (state.phase === "drive") {
       state.phase = "belt";
-      controls.hidden = true;
       hint.textContent = "Sätt på bilbältet igen innan du kör";
     } else if (state.doorAjar && !state.engineOn) {
       hint.textContent = "Bältet är av — tryck Gå ur bilen";
@@ -1288,10 +1889,26 @@
     toast("Bilbältet är av.");
   }
 
+  function setDriveMode(mode, announce = true) {
+    state.driveMode = mode === "sport" ? "sport" : "comfort";
+    const sport = state.driveMode === "sport";
+    modeComfortBtn.classList.toggle("on", !sport);
+    modeSportBtn.classList.toggle("on", sport);
+    modeComfortBtn.setAttribute("aria-pressed", String(!sport));
+    modeSportBtn.setAttribute("aria-pressed", String(sport));
+    app.classList.toggle("mode-sport", sport);
+    app.classList.toggle("mode-comfort", !sport);
+    if (announce && state.inside) {
+      hint.textContent = sport
+        ? "Sportläge: snabb gas, vass styrning, högt ljud"
+        : "Komfortläge: mjuk gas, lugn styrning, tystare";
+      toast(sport ? "Sportläge på" : "Komfortläge på", 1600);
+    }
+  }
+
   function setInput(dir, on) {
     if (state.phase !== "drive") return;
     if (dir in state.input) state.input[dir] = on;
-    document.querySelectorAll(`.pedal[data-dir="${dir}"]`).forEach((b) => b.classList.toggle("pressed", on));
   }
 
   driverDoor.addEventListener("click", openDriverDoor);
@@ -1301,12 +1918,69 @@
   innerDoorBtn.addEventListener("click", toggleInnerDoor);
   exitCarBtn.addEventListener("click", exitCar);
   driveNowBtn.addEventListener("click", driveNow);
-  repairBtn.addEventListener("click", repairEngine);
-  keyBtn.addEventListener("click", () => {
-    if (state.phase === "keyOut" && state.holdingKey) putKeyAway();
-    else pickUpKey();
+  modeComfortBtn.addEventListener("click", () => setDriveMode("comfort"));
+  modeSportBtn.addEventListener("click", () => setDriveMode("sport"));
+  repairBtn.addEventListener("click", () => {
+    if (state.engineSwap === "fitted") repairEngine();
+    else openEngineBay();
   });
+  engineSlot.addEventListener("click", () => {
+    if (state.engineSwap === "remove") removeBrokenEngine();
+    else if (state.engineSwap === "holdNew") fitNewEngine();
+  });
+  engineSlot.addEventListener("pointerup", (e) => {
+    if (state.holdingEngine && state.engineSwap === "holdNew") {
+      e.preventDefault();
+      fitNewEngine();
+    }
+  });
+  newEngineBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try { newEngineBtn.setPointerCapture(e.pointerId); } catch (_) {}
+    pickNewEngine(e.clientX, e.clientY);
+  });
+  newEngineBtn.addEventListener("click", (e) => {
+    if (!state.holdingEngine) pickNewEngine(e.clientX, e.clientY);
+  });
+  engineDoneBtn.addEventListener("click", repairEngine);
+
+  keyBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    if (state.phase === "keyOut" && state.holdingKey) {
+      putKeyAway();
+      return;
+    }
+    if (state.holdingKey) return;
+    try { keyBtn.setPointerCapture(e.pointerId); } catch (_) {}
+    pickUpKey(e.clientX, e.clientY);
+  });
+  keyBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (state.phase === "keyOut" && state.holdingKey) putKeyAway();
+    else if (!state.holdingKey && !state.keyInIgnition) pickUpKey(e.clientX, e.clientY);
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (state.holdingEngine) moveHeldEngine(e.clientX, e.clientY);
+    if (state.holdingKey && !state.keyInIgnition) moveHeldKey(e.clientX, e.clientY);
+  });
+
+  window.addEventListener("pointerup", (e) => {
+    if (state.holdingEngine && state.engineSwap === "holdNew") {
+      moveHeldEngine(e.clientX, e.clientY);
+      if (isOverEngineSlot(e.clientX, e.clientY)) fitNewEngine();
+    }
+    if (state.holdingKey && !state.keyInIgnition) {
+      moveHeldKey(e.clientX, e.clientY);
+      if (isOverKeyhole(e.clientX, e.clientY)) startEngine();
+    }
+  });
+
   slot.addEventListener("click", startEngine);
+  slot.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    if (state.holdingKey && !state.keyInIgnition) startEngine();
+  });
   keyOut.addEventListener("click", takeOutKey);
   belt.addEventListener("click", putBelt);
   unbelt.addEventListener("click", removeBelt);
@@ -1339,25 +2013,6 @@
     setInput(d, false);
   });
 
-  document.getElementById("shiftUp").addEventListener("click", (e) => {
-    e.preventDefault();
-    shiftUp();
-  });
-  document.getElementById("shiftDown").addEventListener("click", (e) => {
-    e.preventDefault();
-    shiftDown();
-  });
-
-  controls.querySelectorAll(".pedal[data-dir]").forEach((btn) => {
-    const dir = btn.dataset.dir;
-    const on = (e) => { e.preventDefault(); setInput(dir, true); };
-    const off = (e) => { e.preventDefault(); setInput(dir, false); };
-    btn.addEventListener("pointerdown", on);
-    btn.addEventListener("pointerup", off);
-    btn.addEventListener("pointerleave", off);
-    btn.addEventListener("pointercancel", off);
-  });
-
   window.addEventListener("resize", resize);
 
   let last = performance.now();
@@ -1365,6 +2020,7 @@
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     if (state.inside) {
+      updateRev(dt);
       updatePhysics(dt);
       updateUI();
       render();
@@ -1373,6 +2029,43 @@
   }
   requestAnimationFrame(loop);
 
-  updateExteriorUI();
-  toast("Din röda sportbil väntar — öppna förardörren");
+  function beginInside() {
+    state.inside = true;
+    state.doorAjar = false;
+    state.driverOpen = false;
+    state.passengerOpen = false;
+    state.phase = "ready";
+    state.belted = true;
+    state.holdingKey = false;
+    state.keyInIgnition = false;
+    state.engineOn = false;
+    state.gearIndex = 0;
+
+    app.classList.remove("outside");
+    exterior.hidden = true;
+    viewport.hidden = false;
+    cockpit.hidden = false;
+    doorOverlay.hidden = true;
+    innerDoorBtn.textContent = "Öppna dörr";
+    innerDoorBtn.classList.remove("warn");
+    driveNowBtn.hidden = true;
+
+    showCabinControls();
+    beltStation.hidden = true;
+    keyBtn.hidden = false;
+    keyBtn.disabled = false;
+    keyBtn.classList.add("guide");
+    keyCaption.textContent = "Ta upp";
+    keyholeWrap.hidden = false;
+    syncGearLabel();
+    updateKeyholeUI();
+    updateExitButton();
+    hint.textContent = "Du sitter i bilen. Ta upp nyckeln och sätt den i nyckelhålet.";
+    resize();
+    requestAnimationFrame(resize);
+  }
+
+  beginInside();
+  setDriveMode("comfort", false);
+  toast("Du sitter i bilen. Ta upp nyckeln!", 3400);
 })();
