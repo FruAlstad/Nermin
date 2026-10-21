@@ -5,6 +5,11 @@
   --foam: #eef5fb;
   --accent: #ff7a18;
   --ok: #3ad27a;
+  --cabin-roll: 0deg;
+  --cabin-yaw: 0deg;
+  --cabin-pitch: 0deg;
+  --car-spin-y: -18deg;
+  --car-spin-x: 8deg;
 }
 
 * { box-sizing: border-box; }
@@ -59,26 +64,40 @@ html, body {
 .lot {
   position: relative;
   width: min(96vw, 640px);
-  height: min(56vh, 360px);
+  height: min(58vh, 380px);
   display: grid;
   place-items: end center;
+  perspective: 900px;
+  perspective-origin: 50% 55%;
 }
 
 .sports-car {
   position: relative;
   width: 100%;
-  height: 230px;
+  height: 250px;
+  transform-style: preserve-3d;
+  transform:
+    rotateX(var(--car-spin-x))
+    rotateY(var(--car-spin-y))
+    translateZ(0);
+  transition: transform 0.08s linear;
+  cursor: grab;
+  transform-origin: 50% 70%;
 }
+
+.sports-car:active { cursor: grabbing; }
 
 .car-shadow {
   position: absolute;
-  left: 8%;
-  right: 6%;
-  bottom: 10px;
-  height: 26px;
-  background: rgba(0,0,0,.42);
+  left: 10%;
+  right: 8%;
+  bottom: 18px;
+  height: 28px;
+  background: rgba(0,0,0,.45);
   border-radius: 50%;
-  filter: blur(8px);
+  filter: blur(10px);
+  transform: translateZ(-40px) rotateX(80deg) scale(1.05);
+  transform-style: preserve-3d;
 }
 
 .sc-body {
@@ -94,6 +113,8 @@ html, body {
     0 12px 0 rgba(0,0,0,.28),
     inset 0 2px 0 rgba(255,255,255,.2),
     inset 0 -10px 18px rgba(0,0,0,.25);
+  transform-style: preserve-3d;
+  transform: translateZ(20px);
 }
 
 .sc-hood {
@@ -105,6 +126,7 @@ html, body {
   background: linear-gradient(180deg, rgba(255,255,255,.12), transparent 60%);
   border-radius: 8px 40px 0 0;
   clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 100%);
+  transform: translateZ(28px);
 }
 
 .sc-hood-line {
@@ -127,6 +149,7 @@ html, body {
   border-radius: 3px 8px 3px 3px;
   z-index: 4;
   box-shadow: 0 2px 4px rgba(0,0,0,.35);
+  transform: translateZ(48px);
 }
 .sc-mirror.left-m { left: 26%; }
 .sc-mirror.right-m {
@@ -161,7 +184,11 @@ html, body {
   background: linear-gradient(180deg, #1a1f28, #0d1016);
   border-radius: 18px 28px 4px 8px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  transform: translateZ(36px);
+  transform-style: preserve-3d;
 }
+
+.sc-spoiler { transform: translateZ(44px); }
 
 .sc-windshield {
   position: absolute;
@@ -322,6 +349,8 @@ html, body {
     radial-gradient(circle at 50% 50%, #d0d4da 0 18%, #1a1d22 19% 34%, #0b0d10 35% 58%, #222 59% 68%, #0b0d10 69%);
   box-shadow: inset 0 0 0 3px #3a4048, 0 4px 0 rgba(0,0,0,.35);
   overflow: hidden;
+  transform-style: preserve-3d;
+  transform: translateZ(8px);
 }
 .rim-spin {
   position: absolute;
@@ -553,6 +582,24 @@ html, body {
   overflow: hidden;
   background: #5eaad0;
   min-height: 0;
+  perspective: 1200px;
+  transform-style: preserve-3d;
+  z-index: 1;
+  pointer-events: none; /* klick ska gå till kupén under — canvas behöver inte mus */
+}
+
+.viewport canvas,
+.viewport .minimap-wrap {
+  pointer-events: none;
+}
+
+.viewport #view {
+  transform-origin: 50% 70%;
+  transform:
+    rotateZ(var(--cabin-roll))
+    rotateY(var(--cabin-yaw))
+    rotateX(var(--cabin-pitch));
+  transition: transform 0.05s linear;
 }
 
 .viewport[hidden],
@@ -574,11 +621,14 @@ html, body {
   z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(200,230,255,.28), rgba(180,215,255,.08) 22%, transparent 42%),
-    radial-gradient(ellipse at 28% 8%, rgba(255,255,255,.35), transparent 38%),
-    radial-gradient(ellipse at 72% 12%, rgba(255,255,255,.2), transparent 32%),
-    linear-gradient(90deg, rgba(0,0,0,.2), transparent 14%, transparent 86%, rgba(0,0,0,.2));
-  box-shadow: inset 0 0 0 3px rgba(180, 210, 235, 0.25);
+    linear-gradient(180deg, rgba(210,235,255,.32), rgba(180,215,255,.1) 18%, transparent 38%),
+    radial-gradient(ellipse at 22% 6%, rgba(255,255,255,.42), transparent 34%),
+    radial-gradient(ellipse at 78% 10%, rgba(255,255,255,.22), transparent 30%),
+    radial-gradient(ellipse at 50% 100%, rgba(40,20,24,.35), transparent 45%),
+    linear-gradient(90deg, rgba(0,0,0,.32), transparent 12%, transparent 88%, rgba(0,0,0,.32));
+  box-shadow:
+    inset 0 0 0 3px rgba(180, 210, 235, 0.22),
+    inset 0 -40px 60px rgba(20, 10, 12, 0.25);
 }
 
 .side-window {
@@ -904,120 +954,346 @@ html, body {
 .a-pillar {
   position: absolute;
   top: 0;
-  bottom: 8%;
-  width: 10%;
+  bottom: 6%;
+  width: 11%;
   z-index: 4;
   pointer-events: none;
   background:
-    linear-gradient(90deg, #080a0d, #1c222a 40%, #0d1116 70%, #1a1014),
-    linear-gradient(180deg, #2a1a1e, transparent 40%);
+    linear-gradient(180deg, #2a1c20 0%, #141018 40%, #0a080a 100%),
+    linear-gradient(90deg, #080a0d, #1c1618 45%, #0d0a0c);
+  overflow: hidden;
+  transform-style: preserve-3d;
+}
+
+.viewport .a-pillar.left {
+  transform: skewX(-10deg) translateZ(30px) rotateY(18deg);
+  transform-origin: top left;
+}
+
+.viewport .a-pillar.right {
+  transform: skewX(10deg) translateZ(30px) rotateY(-18deg);
+  transform-origin: top right;
+}
+
+.a-pillar .pillar-trim {
+  position: absolute;
+  top: 8%;
+  bottom: 20%;
+  width: 3px;
+  background: linear-gradient(180deg, rgba(200,190,180,.35), rgba(120,110,100,.15));
+  border-radius: 2px;
+}
+
+.a-pillar.left .pillar-trim { right: 18%; }
+.a-pillar.right .pillar-trim { left: 18%; }
+
+.a-pillar .grab-handle {
+  position: absolute;
+  top: 28%;
+  right: 28%;
+  width: 10px;
+  height: 38px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #2a2428, #5a5458 40%, #1a1618);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 2px 0 4px rgba(0,0,0,.4);
 }
 
 .a-pillar.left {
   left: 0;
-  transform: skewX(-11deg);
   transform-origin: top left;
-  box-shadow: 14px 0 28px rgba(0,0,0,.55);
-  border-right: 1px solid rgba(255,255,255,.06);
+  box-shadow: 16px 0 32px rgba(0,0,0,.6);
+  border-right: 1px solid rgba(255,255,255,.07);
 }
 
 .a-pillar.right {
   right: 0;
-  transform: skewX(11deg);
   transform-origin: top right;
-  box-shadow: -14px 0 28px rgba(0,0,0,.55);
-  border-left: 1px solid rgba(255,255,255,.06);
+  box-shadow: -16px 0 32px rgba(0,0,0,.6);
+  border-left: 1px solid rgba(255,255,255,.07);
 }
 
 .roof-liner {
   position: absolute;
   top: 0;
-  left: 8%;
-  right: 8%;
-  height: 10%;
+  left: 7%;
+  right: 7%;
+  height: 12%;
   z-index: 3;
   pointer-events: none;
   background:
-    linear-gradient(180deg, #141018 0%, #1a1216 55%, transparent),
-    radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.04), transparent 60%);
+    linear-gradient(180deg, #1a1216 0%, #22181c 40%, #160e12 70%, transparent),
+    repeating-linear-gradient(90deg, transparent 0 28px, rgba(255,255,255,.015) 28px 29px);
 }
+
+.dome-light {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  width: 36px;
+  height: 10px;
+  transform: translateX(-50%);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #3a3438, #1a1618);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 12px rgba(255,230,180,.15);
+}
+
+.app.engine-on .dome-light {
+  background: linear-gradient(180deg, #fff8e8, #e8d0a0);
+  box-shadow: 0 0 18px rgba(255,220,160,.55);
+}
+
+.sun-visor {
+  position: absolute;
+  top: 12%;
+  width: 14%;
+  height: 42%;
+  border-radius: 3px 3px 6px 6px;
+  background: linear-gradient(180deg, #2a1e22, #1a1014);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 4px 8px rgba(0,0,0,.35);
+}
+
+.left-visor { left: 18%; transform: rotate(-2deg); }
+.right-visor { right: 18%; transform: rotate(2deg); }
 
 .door-card {
   position: absolute;
-  top: 18%;
-  bottom: 14%;
-  width: 9%;
+  top: 16%;
+  bottom: 12%;
+  width: 10.5%;
   z-index: 5;
   pointer-events: none;
   background:
-    linear-gradient(180deg, #2a1c20 0%, #1a1014 40%, #120c0e 100%);
-  box-shadow: inset 0 0 18px rgba(0,0,0,.45);
+    linear-gradient(180deg, #322226 0%, #221618 35%, #160e10 70%, #100a0c 100%);
+  box-shadow: inset 0 0 22px rgba(0,0,0,.5);
+  overflow: hidden;
+  transform-style: preserve-3d;
 }
 
 .left-door-card {
-  left: 0;
-  border-radius: 0 8px 4px 0;
-  clip-path: polygon(0 0, 100% 4%, 100% 96%, 0 100%);
+  transform: translateZ(18px) rotateY(22deg);
+  transform-origin: left center;
 }
 
 .right-door-card {
+  transform: translateZ(18px) rotateY(-22deg);
+  transform-origin: right center;
+}
+
+.door-leather {
+  position: absolute;
+  inset: 8% 10% 28% 8%;
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.04), transparent 40%),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(0,0,0,.06) 3px 4px),
+    linear-gradient(180deg, #3a282c, #24181c);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+}
+
+.door-armrest {
+  position: absolute;
+  top: 48%;
+  left: 8%;
+  right: 8%;
+  height: 14%;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2a1c20, #120a0c);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.05), 0 3px 6px rgba(0,0,0,.4);
+}
+
+.viewport .left-door-card {
+  left: 0;
+  border-radius: 0 10px 6px 0;
+  clip-path: polygon(0 0, 100% 3%, 100% 97%, 0 100%);
+}
+
+.viewport .right-door-card {
   right: 0;
-  border-radius: 8px 0 0 4px;
-  clip-path: polygon(0 4%, 100% 0, 100% 100%, 0 96%);
+  border-radius: 10px 0 0 6px;
+  clip-path: polygon(0 3%, 100% 0, 100% 100%, 0 97%);
 }
 
 .door-handle-inner {
   position: absolute;
-  top: 42%;
-  width: 42%;
-  height: 10px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #c8c2b4, #7a7468);
-  box-shadow: 0 2px 0 #3a3830;
+  top: 38%;
+  width: 48%;
+  height: 11px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #e0d8c8, #9a9284 55%, #5a5448);
+  box-shadow: 0 2px 0 #2a2820, inset 0 1px 0 rgba(255,255,255,.45);
 }
 
-.left-door-card .door-handle-inner { right: 18%; }
-.right-door-card .door-handle-inner { left: 18%; }
+.left-door-card .door-handle-inner { right: 14%; }
+.right-door-card .door-handle-inner { left: 14%; }
+
+.door-lock-pin {
+  position: absolute;
+  top: 10%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #c0b8a8 50%, #5a5448);
+  box-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+.left-door-card .door-lock-pin { right: 22%; }
+.right-door-card .door-lock-pin { left: 22%; }
+
+.door-window-switch {
+  position: absolute;
+  top: 52%;
+  width: 36%;
+  height: 7px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #3a3438, #1a1618);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+}
+
+.left-door-card .door-window-switch { right: 18%; }
+.right-door-card .door-window-switch { left: 18%; }
 
 .door-speaker {
   position: absolute;
-  bottom: 16%;
+  bottom: 12%;
   left: 50%;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   transform: translateX(-50%);
   border-radius: 50%;
   background:
-    radial-gradient(circle at 40% 35%, #3a3236, #120c0e 60%),
+    radial-gradient(circle at 40% 35%, #4a4246, #1a1214 55%),
     repeating-radial-gradient(circle, #2a2226 0 2px, #0a0808 2px 4px);
-  border: 2px solid #3a3236;
+  border: 2px solid #4a4044;
+  box-shadow: inset 0 0 8px rgba(0,0,0,.5);
+}
+
+.door-ambient {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 36%;
+  height: 2px;
+  border-radius: 2px;
+  background: #1a4a5a;
+  opacity: 0.35;
+  box-shadow: 0 0 8px transparent;
+}
+
+.app.engine-on .door-ambient {
+  background: #3ad0e8;
+  opacity: 0.85;
+  box-shadow: 0 0 10px rgba(58, 208, 232, 0.65);
+}
+
+.app.mode-sport.engine-on .door-ambient {
+  background: #ff4a3a;
+  box-shadow: 0 0 10px rgba(255, 70, 50, 0.7);
+}
+
+.seat-wing {
+  position: absolute;
+  bottom: 0;
+  width: 14%;
+  height: 28%;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent 0%, #2a1a1e 25%, #1a1014 70%, #0e080a);
+  box-shadow: inset 0 0 20px rgba(0,0,0,.35);
+}
+
+.left-seat {
+  left: 6%;
+  clip-path: polygon(20% 0, 100% 8%, 100% 100%, 0 100%);
+  border-radius: 0 18px 0 0;
+}
+
+.right-seat {
+  right: 6%;
+  clip-path: polygon(0 8%, 80% 0, 100% 100%, 0 100%);
+  border-radius: 18px 0 0 0;
 }
 
 .dash-shelf {
   position: absolute;
-  left: 10%;
-  right: 10%;
+  left: 9%;
+  right: 9%;
   bottom: 0;
-  height: 11%;
+  height: 13%;
   z-index: 4;
   pointer-events: none;
   background:
-    linear-gradient(180deg, #3a2428 0%, #1e1216 55%, #120a0c 100%);
-  clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%);
+    linear-gradient(180deg, #4a3034 0%, #2a1a1e 28%, #1a1014 65%, #10080a 100%);
+  clip-path: polygon(3% 0, 97% 0, 100% 100%, 0 100%);
   box-shadow:
-    inset 0 8px 14px rgba(255,255,255,.05),
-    0 -6px 20px rgba(0,0,0,.4);
+    inset 0 10px 18px rgba(255,255,255,.06),
+    inset 0 -8px 16px rgba(0,0,0,.45),
+    0 -8px 24px rgba(0,0,0,.45);
+  transform: translateZ(24px) rotateX(-18deg);
+  transform-origin: 50% 100%;
+}
+
+.viewport .mirror {
+  transform: translateZ(40px);
+}
+
+.viewport .center-mirror {
+  transform: translateX(-50%) translateZ(50px) rotateX(4deg);
+}
+
+.viewport .minimap-wrap {
+  transform: translateZ(35px) rotateY(-8deg);
+}
+
+.screen-bezel {
+  transform-style: preserve-3d;
+  transform: translateZ(8px);
+}
+
+.dash-carbon {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 0;
+  height: 22%;
+  background:
+    repeating-linear-gradient(135deg, #1a1214 0 2px, #2a1e22 2px 4px),
+    linear-gradient(180deg, #3a2a2e, #1a1014);
+  opacity: 0.85;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.dash-defrost {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 8%;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, #5a4a4e 0 8px, transparent 8px 14px);
+  opacity: 0.5;
+}
+
+.dash-stitch-line {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  top: 42%;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #7a5a5e 0 5px, transparent 5px 10px);
+  opacity: 0.4;
 }
 
 .dash-shelf::before {
   content: "";
   position: absolute;
-  left: 18%;
-  right: 18%;
-  top: 28%;
-  height: 3px;
-  background: repeating-linear-gradient(90deg, #5a3a3e 0 6px, transparent 6px 10px);
-  opacity: 0.45;
+  left: 22%;
+  right: 22%;
+  bottom: 18%;
+  height: 18%;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #1a1214, #0a080a);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.5);
+  opacity: 0.7;
 }
 
 .seatbelt-visual {
@@ -1031,16 +1307,30 @@ html, body {
 
 .belt-diag {
   position: absolute;
-  right: 14%;
-  top: 4%;
-  width: 8px;
-  height: 55%;
-  background: linear-gradient(90deg, #1a120c, #a88858 40%, #5a4830 100%);
-  transform: rotate(30deg);
+  right: 13%;
+  top: 6%;
+  width: 10px;
+  height: 58%;
+  background:
+    linear-gradient(90deg, #1a120c, #c4a070 35%, #8a6840 55%, #4a3820 100%),
+    repeating-linear-gradient(180deg, transparent 0 8px, rgba(0,0,0,.12) 8px 9px);
+  transform: rotate(28deg);
   transform-origin: top center;
   border-radius: 2px;
-  box-shadow: 1px 2px 6px rgba(0,0,0,.35);
-  opacity: 0.75;
+  box-shadow: 2px 3px 8px rgba(0,0,0,.4);
+  opacity: 0.88;
+}
+
+.belt-retractor {
+  position: absolute;
+  right: 11%;
+  top: 4%;
+  width: 18px;
+  height: 22px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #3a3438, #1a1618);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 2px 4px rgba(0,0,0,.4);
+  z-index: 1;
 }
 
 .belt-lap-bar { display: none !important; }
@@ -1065,35 +1355,40 @@ html, body {
   z-index: 6;
   pointer-events: none;
   background: linear-gradient(180deg, #1a1d22, #0a0c10);
-  border: 4px solid #2a2e34;
+  border: 5px solid #1a1e24;
   border-radius: 10px;
   overflow: hidden;
   box-shadow:
-    0 10px 22px rgba(0,0,0,.55),
-    inset 0 0 0 2px #8a9199,
-    inset 0 1px 0 rgba(255,255,255,.25);
+    0 12px 26px rgba(0,0,0,.6),
+    inset 0 0 0 2px #a8b0b8,
+    inset 0 1px 0 rgba(255,255,255,.3),
+    inset 0 0 20px rgba(0,0,0,.25);
+}
+
+.mirror-stem {
+  position: absolute;
+  left: 50%;
+  top: -14px;
+  width: 22px;
+  height: 16px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, #3a4048, #1a1e24);
+  border-radius: 4px 4px 0 0;
+  z-index: 3;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15);
 }
 
 .center-mirror {
-  top: 2%;
+  top: 2.5%;
   left: 50%;
   transform: translateX(-50%);
-  width: min(26vw, 168px);
-  height: 62px;
+  width: min(26vw, 172px);
+  height: 64px;
   border-radius: 8px;
 }
 
 .center-mirror::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -10px;
-  width: 18px;
-  height: 12px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, #2a2e34, #12151a);
-  border-radius: 3px 3px 0 0;
-  z-index: 3;
+  display: none;
 }
 
 .side-mirror {
@@ -1125,14 +1420,28 @@ html, body {
   right: 1.2%;
   bottom: 18%;
   z-index: 6;
-  width: min(28vw, 140px);
-  height: min(28vw, 140px);
-  border-radius: 12px;
-  border: 3px solid #8a97a6;
-  background: #0a0e13;
-  box-shadow: 0 8px 18px rgba(0,0,0,.45);
+  width: min(32vw, 168px);
+  height: min(32vw, 168px);
+  border-radius: 14px;
+  border: 3px solid #6a7888;
+  background:
+    linear-gradient(160deg, #1a222c, #0a0e13);
+  box-shadow:
+    0 10px 22px rgba(0,0,0,.5),
+    inset 0 0 0 1px rgba(255,255,255,.12),
+    inset 0 1px 0 rgba(255,255,255,.18);
   overflow: hidden;
   pointer-events: none;
+}
+
+.minimap-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 11px;
+  box-shadow: inset 0 0 24px rgba(0,0,0,.35);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .minimap-wrap canvas {
@@ -1145,66 +1454,557 @@ html, body {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 2px;
+  top: 4px;
   text-align: center;
   font-size: 0.58rem;
   font-weight: 800;
-  color: rgba(255,255,255,.7);
+  color: rgba(200, 220, 240, .85);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
+  z-index: 3;
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  pointer-events: none;
 }
 
 .cockpit {
   position: relative;
-  z-index: 10;
+  z-index: 30;
   background:
-    linear-gradient(180deg, #2a1a1e 0%, #1a1014 35%, #120a0c 100%);
+    linear-gradient(180deg, #322226 0%, #221618 28%, #160e10 60%, #0e080a 100%);
   border-top: 3px solid #05070a;
   box-shadow:
-    0 -18px 30px rgba(0,0,0,.55),
-    inset 0 1px 0 rgba(255,255,255,.06);
+    0 -22px 36px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.07),
+    inset 0 40px 60px rgba(0,0,0,.2);
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.cockpit .dash-top {
+  position: relative;
+  z-index: 2;
+}
+
+.cockpit .dash-row {
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+/* 3D bara på ratten — inte på knappar (annars blockeras klick) */
+.cockpit .bmw-wheel,
+.cockpit .steering {
+  transform-style: preserve-3d;
+  perspective: 500px;
+  filter: drop-shadow(0 18px 14px rgba(0,0,0,.55));
+  cursor: grab;
+  touch-action: none;
+  pointer-events: auto;
+  z-index: 8;
+  position: relative;
+}
+
+/* Alla delar inuti ratten ska inte stjäla musen — hela ytan går till #steering */
+.cockpit .bmw-wheel *,
+.cockpit .steering * {
+  pointer-events: none !important;
+}
+
+.cockpit .bmw-wheel:active,
+.cockpit .steering:active {
+  cursor: grabbing;
+}
+
+.cockpit .car-screen,
+.cockpit .right-panel,
+.cockpit .cluster,
+.cockpit .key-ignition-row,
+.cockpit .shifter,
+.cockpit button {
+  position: relative;
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.cabin-ambient {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 0;
+  height: 3px;
+  background: #1a3a48;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.app.engine-on .cabin-ambient {
+  background: linear-gradient(90deg, transparent, #3ad0e8, transparent);
+  opacity: 0.7;
+  box-shadow: 0 0 14px rgba(58, 208, 232, 0.45);
+}
+
+.app.mode-sport.engine-on .cabin-ambient {
+  background: linear-gradient(90deg, transparent, #ff4a3a, transparent);
+  box-shadow: 0 0 14px rgba(255, 70, 50, 0.5);
 }
 
 .dash-top {
   position: relative;
-  height: 22px;
+  height: 28px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 12%;
+  justify-content: center;
+  gap: 1.2rem;
+  width: 100%;
+  padding: 0 1rem;
   background:
-    linear-gradient(180deg, #3a282c, #1e1418 70%, #140c0e);
-  box-shadow: inset 0 -1px 0 rgba(255,255,255,.05);
+    linear-gradient(180deg, #4a3438, #2a1c20 55%, #1a1014);
+  box-shadow:
+    inset 0 -1px 0 rgba(255,255,255,.06),
+    inset 0 2px 0 rgba(255,255,255,.04);
+  z-index: 2;
+}
+
+.dash-top .dash-stitch {
+  max-width: 220px;
+  flex: 0 1 220px;
+}
+
+.dash-chrome {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #a89888 20%, #d8d0c0 50%, #a89888 80%, transparent);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .dash-vent {
-  width: 52px;
-  height: 12px;
-  border-radius: 3px;
+  width: 58px;
+  height: 14px;
+  border-radius: 4px;
   background:
-    repeating-linear-gradient(90deg, #1a1214 0 3px, #3a2a2e 3px 5px);
-  border: 1px solid #4a3a3e;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.5);
+    repeating-linear-gradient(90deg, #0a080a 0 3px, #3a2e32 3px 5px);
+  border: 1px solid #5a4a4e;
+  box-shadow:
+    inset 0 2px 4px rgba(0,0,0,.55),
+    0 1px 0 rgba(255,255,255,.08);
 }
 
 .dash-stitch {
   flex: 1;
   height: 2px;
   margin: 0 1rem;
-  background: repeating-linear-gradient(90deg, #6a4a4e 0 5px, transparent 5px 9px);
-  opacity: 0.4;
+  background: repeating-linear-gradient(90deg, #8a6a6e 0 5px, transparent 5px 10px);
+  opacity: 0.45;
 }
 
 .dash-row {
-  display: grid;
-  grid-template-columns: auto auto auto;
-  gap: 0.75rem;
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  max-width: 1100px;
+  gap: 0.45rem 0.55rem;
+  width: fit-content;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 0.45rem 0.75rem 0.75rem;
+  padding: 0.5rem 0.75rem 1rem;
   transform: none;
+}
+
+/* —— Bilskärm / appar —— */
+.car-screen {
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.screen-bezel {
+  background: linear-gradient(160deg, #2a2e34, #0a0c10 55%, #12151a);
+  border-radius: 14px;
+  padding: 7px;
+  box-shadow:
+    0 8px 0 #05070a,
+    inset 0 1px 0 rgba(255,255,255,.12),
+    0 0 0 1px #3a4048;
+}
+
+.screen-glass {
+  position: relative;
+  min-height: 168px;
+  border-radius: 9px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 30% 0%, rgba(80,140,200,.18), transparent 50%),
+    linear-gradient(180deg, #0e1824, #081018 60%, #060c12);
+  box-shadow: inset 0 0 0 1px rgba(120,180,220,.2);
+  color: #e8f0f8;
+}
+
+.screen-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.28rem 0.45rem 0.15rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #9eb4c8;
+  letter-spacing: 0.02em;
+}
+
+.screen-brand {
+  color: #7ec8ff;
+  font-family: Outfit, sans-serif;
+  font-size: 0.62rem;
+}
+
+.screen-signal { letter-spacing: -0.08em; color: #5ad27a; }
+
+.screen-home,
+.screen-app,
+.screen-off {
+  padding: 0.2rem 0.45rem 0.5rem;
+}
+
+.screen-home[hidden],
+.screen-app[hidden],
+.screen-off[hidden] {
+  display: none !important;
+}
+
+.screen-greeting {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #c8d8e8;
+}
+
+.screen-apps {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.3rem;
+}
+
+.car-screen .screen-apps {
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.screen-app-btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 0.4rem 0.2rem 0.35rem;
+  background: rgba(255,255,255,.06);
+  color: #e8f0f8;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.58rem;
+  transition: background 0.12s ease, transform 0.08s ease;
+}
+
+.screen-app-btn:hover {
+  background: rgba(126, 200, 255, 0.16);
+}
+
+.screen-app-btn:active {
+  transform: scale(0.94);
+}
+
+.screen-app-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #0a1018;
+  box-shadow: 0 2px 0 rgba(0,0,0,.35);
+}
+
+.screen-app-icon.musik { background: linear-gradient(135deg, #ff6b8a, #c0395b); color: #fff; }
+.screen-app-icon.navi { background: linear-gradient(135deg, #5ad27a, #1e8a4a); color: #fff; }
+.screen-app-icon.klimat { background: linear-gradient(135deg, #6ad0ff, #2a7ab0); color: #fff; }
+.screen-app-icon.telefon { background: linear-gradient(135deg, #8dffb4, #2a9a5a); color: #0a2010; }
+.screen-app-icon.korlage { background: linear-gradient(135deg, #ffb347, #c0392b); color: #fff; }
+.screen-app-icon.radio { background: linear-gradient(135deg, #c4a0ff, #6a3ac0); color: #fff; }
+.screen-app-icon.youtube { background: linear-gradient(135deg, #ff4d4d, #c62828); color: #fff; }
+
+/* —— YouTube-overlay i bilen —— */
+.yt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem;
+  background: rgba(4, 6, 10, 0.72);
+}
+
+.yt-overlay[hidden] { display: none !important; }
+
+.yt-panel {
+  width: min(920px, 96vw);
+  max-height: min(92vh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #1a1e24, #0a0c10);
+  border: 2px solid #3a4654;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.65);
+  overflow: hidden;
+}
+
+.yt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  background: #12151a;
+  border-bottom: 1px solid #2a323c;
+}
+
+.yt-head strong {
+  font-family: Outfit, sans-serif;
+  font-size: 1rem;
+  color: #ff6b6b;
+}
+
+.yt-close {
+  border: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.08);
+  color: #e8f0f8;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.yt-close:hover { background: rgba(255,80,80,.25); }
+
+.yt-player-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.yt-player-wrap iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: none;
+}
+
+.yt-player-wrap.has-video iframe { display: block; }
+.yt-player-wrap.has-video .yt-placeholder { display: none; }
+
+.yt-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  color: #8fa0b2;
+  font-weight: 700;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255,60,60,.12), transparent 55%),
+    #0a0c10;
+}
+
+.yt-placeholder p { margin: 0; max-width: 28ch; }
+
+.yt-controls {
+  padding: 0.65rem 0.75rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #0e1218;
+  border-top: 1px solid #2a323c;
+}
+
+.yt-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.yt-preset {
+  border: 0;
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.72rem;
+  cursor: pointer;
+  color: #e8f0f8;
+  background: rgba(255,255,255,.08);
+}
+
+.yt-preset:hover { background: rgba(255,80,80,.28); }
+.yt-preset.on { background: #c62828; color: #fff; }
+
+.yt-form {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.yt-input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid #3a4654;
+  background: #0a0e13;
+  color: #e8f0f8;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.yt-input:focus {
+  outline: 0;
+  border-color: #ff6b6b;
+}
+
+.yt-go {
+  border: 0;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  font-family: Outfit, sans-serif;
+  font-weight: 800;
+  cursor: pointer;
+  background: linear-gradient(180deg, #ff6b6b, #c62828);
+  color: #fff;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .yt-panel { max-height: 95vh; }
+  .yt-form { flex-direction: column; }
+}
+
+.screen-app-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.screen-app-head strong {
+  font-family: Outfit, sans-serif;
+  font-size: 0.85rem;
+}
+
+.screen-back {
+  border: 0;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  background: rgba(255,255,255,.1);
+  color: #e8f0f8;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.screen-back:hover { background: rgba(126, 200, 255, 0.22); }
+
+.screen-app-body {
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.screen-app-body p {
+  margin: 0 0 0.4rem;
+  color: #b8c8d8;
+}
+
+.screen-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.35rem;
+}
+
+.screen-chip,
+.screen-action {
+  border: 0;
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.68rem;
+  cursor: pointer;
+  color: #e8f0f8;
+  background: rgba(255,255,255,.1);
+}
+
+.screen-chip.on,
+.screen-action.primary {
+  background: linear-gradient(180deg, #5ab0e8, #2a78b0);
+  color: #fff;
+}
+
+.screen-chip.danger.on {
+  background: linear-gradient(180deg, #ff6a4a, #c0392b);
+}
+
+.screen-big {
+  font-family: Outfit, sans-serif;
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.screen-off {
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background: #05070a;
+}
+
+.screen-off p {
+  margin: 0 0 0.5rem;
+  color: #5a6570;
+  font-weight: 700;
+}
+
+.screen-wake {
+  border: 0;
+  border-radius: 10px;
+  padding: 0.45rem 0.8rem;
+  font-family: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  background: #2a6f86;
+  color: #fff;
+}
+
+.app.engine-on .screen-glass {
+  box-shadow:
+    inset 0 0 0 1px rgba(120,180,220,.28),
+    0 0 18px rgba(80,160,220,.18);
+}
+
+.car-screen[data-off="1"] .screen-home,
+.car-screen[data-off="1"] .screen-app {
+  display: none !important;
 }
 
 .cluster.fuel-only {
@@ -1306,7 +2106,7 @@ html, body {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 0.7rem;
+  gap: 0.55rem;
   flex-shrink: 0;
 }
 
@@ -1372,12 +2172,17 @@ html, body {
 
 .shifter-gate {
   position: relative;
-  width: 72px;
-  height: 92px;
-  background: linear-gradient(180deg, #1a2129, #0d1116);
-  border: 2px solid #3a4654;
-  border-radius: 10px;
-  box-shadow: inset 0 0 12px rgba(0,0,0,.55), 0 4px 0 #05070a;
+  width: 76px;
+  height: 96px;
+  background:
+    linear-gradient(160deg, #2a2226, #121018 45%, #0a080c),
+    repeating-linear-gradient(90deg, transparent 0 6px, rgba(255,255,255,.02) 6px 7px);
+  border: 2px solid #4a5058;
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 16px rgba(0,0,0,.6),
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 5px 0 #05070a;
   overflow: visible;
 }
 
@@ -1442,14 +2247,17 @@ html, body {
 .stick-knob {
   position: absolute;
   left: 50%;
-  top: -10px;
-  width: 18px;
-  height: 18px;
+  top: -12px;
+  width: 20px;
+  height: 20px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #5a6570, #1a2129 55%, #0a0e13);
-  border: 2px solid #8a97a6;
-  box-shadow: 0 3px 0 #05070a;
+  background:
+    radial-gradient(circle at 32% 28%, #6a7078, #2a3038 40%, #12151a 70%, #05070a);
+  border: 2px solid #a8b0b8;
+  box-shadow:
+    0 4px 0 #05070a,
+    inset 0 2px 0 rgba(255,255,255,.2);
 }
 
 .shifter[data-gear="R"] .shift-stick { left: 12%; top: 22%; }
@@ -1542,12 +2350,19 @@ html, body {
 }
 
 .right-panel {
-  justify-self: end;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.35rem;
   min-width: 120px;
+  flex-shrink: 0;
+}
+
+.cluster.fuel-only,
+.wheel-area,
+.car-screen,
+.right-panel {
+  margin: 0;
 }
 
 .drive-mode {
@@ -2050,27 +2865,85 @@ html, body {
   text-shadow: 0 0 10px rgba(141, 255, 180, 0.45);
 }
 
-/* Ny BMW-ratt — rund, svart läder, roundel */
+/* —— 3D BMW-ratt —— */
 .bmw-wheel {
-  width: 130px !important;
-  height: 130px !important;
-  min-width: 130px !important;
-  min-height: 130px !important;
+  width: 142px !important;
+  height: 142px !important;
+  min-width: 142px !important;
+  min-height: 142px !important;
   aspect-ratio: 1 / 1 !important;
   flex-shrink: 0 !important;
   border-radius: 50%;
+  transform-style: preserve-3d;
+  perspective: 600px;
+}
+
+.bmw-wheel .rim-3d {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bmw-wheel .rim-back,
+.bmw-wheel .rim-side,
+.bmw-wheel .rim-front,
+.bmw-wheel .rim-grip,
+.bmw-wheel .rim-stitch {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  transform-style: preserve-3d;
+}
+
+.bmw-wheel .rim-back {
+  transform: translateZ(-14px) scale(0.98);
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 36%, #05070a 37% 58%, transparent 59%);
+  box-shadow: 0 0 0 2px #0a0c10;
+  filter: brightness(0.45);
+}
+
+.bmw-wheel .rim-side {
+  transform: translateZ(-7px) scale(0.99);
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 36.5%, #1a1214 37.5% 54%, transparent 55%);
+  box-shadow: inset 0 0 12px rgba(0,0,0,.6);
+}
+
+.bmw-wheel .rim-front {
+  transform: translateZ(0);
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 37%, #1c2026 38% 49%, #0a0c10 50% 55%, transparent 56%);
+  box-shadow:
+    inset 0 0 0 2px #4a5058,
+    inset 0 0 0 6px #0e1014,
+    inset 0 6px 10px rgba(255,255,255,.07),
+    0 2px 0 rgba(255,255,255,.04);
+}
+
+.bmw-wheel .rim-grip {
+  transform: translateZ(4px);
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 38%, transparent 55%),
+    repeating-conic-gradient(from 0deg, rgba(255,255,255,.03) 0 3deg, transparent 3deg 8deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 38%, #000 39% 54%, transparent 55%);
+  mask: radial-gradient(circle closest-side, transparent 0 38%, #000 39% 54%, transparent 55%);
+  opacity: 0.9;
+}
+
+.bmw-wheel .rim-stitch {
+  transform: translateZ(5px);
+  background:
+    repeating-conic-gradient(from 0deg, #6a5050 0 2deg, transparent 2deg 14deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 41%, #000 42% 44%, transparent 45%);
+  mask: radial-gradient(circle closest-side, transparent 0 41%, #000 42% 44%, transparent 45%);
+  opacity: 0.45;
 }
 
 .bmw-wheel .rim {
-  border: 0 !important;
-  border-radius: 50% !important;
-  background:
-    radial-gradient(circle at 50% 50%, transparent 0 37%, #1a1d22 38% 50%, #0a0c10 51% 56%, transparent 57%) !important;
-  box-shadow:
-    inset 0 0 0 2px #3a4048,
-    inset 0 0 0 5px #12151a,
-    0 10px 0 #05070a !important;
-  /* ingen clip-path — håller ratten rund */
+  display: none !important;
 }
 
 .bmw-wheel .spoke {
@@ -2079,65 +2952,89 @@ html, body {
   justify-content: center;
   gap: 4px;
   position: absolute;
-  background: linear-gradient(180deg, #2a3038, #12151a 55%, #0a0c10);
-  z-index: 1;
-  border-radius: 5px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+  background:
+    linear-gradient(180deg, #3a424c, #1a1e24 40%, #0a0c10 100%);
+  z-index: 2;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    inset 0 -2px 4px rgba(0,0,0,.45),
+    0 4px 6px rgba(0,0,0,.35);
+  transform-style: preserve-3d;
 }
 
 .bmw-wheel .spoke.s-left {
-  left: 14%;
-  top: 44%;
-  width: 32%;
-  height: 16px;
-  transform: rotate(12deg);
+  left: 13%;
+  top: 43%;
+  width: 33%;
+  height: 18px;
+  transform: rotate(12deg) translateZ(10px) rotateX(8deg);
 }
 
 .bmw-wheel .spoke.s-right {
-  right: 14%;
-  top: 44%;
-  width: 32%;
-  height: 16px;
-  transform: rotate(-12deg);
+  right: 13%;
+  top: 43%;
+  width: 33%;
+  height: 18px;
+  transform: rotate(-12deg) translateZ(10px) rotateX(8deg);
 }
 
 .bmw-wheel .spoke.s-bottom {
-  left: 46%;
+  left: 45.5%;
   top: 52%;
-  width: 12px;
-  height: 26%;
-  border-radius: 4px;
+  width: 13px;
+  height: 27%;
+  border-radius: 5px;
+  transform: translateZ(10px) rotateX(-6deg);
 }
 
 .bmw-wheel .mf-btn {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
-  background: linear-gradient(180deg, #5a6570, #2a323c);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.2);
+  background: linear-gradient(180deg, #7a8490, #2a323c);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.35),
+    0 1px 2px rgba(0,0,0,.5);
+  transform: translateZ(3px);
 }
 
 .bmw-wheel .hub {
-  inset: 33% !important;
+  inset: 31% !important;
   background:
-    radial-gradient(circle at 40% 30%, #2a3038, #101418 60%, #05070a) !important;
+    radial-gradient(circle at 38% 28%, #3a444e, #14181e 55%, #05070a) !important;
   box-shadow:
-    0 0 0 3px #c0c6cc,
-    0 0 0 5px #1a1d22,
-    inset 0 2px 0 rgba(255,255,255,.12) !important;
+    0 0 0 3px #d0d6de,
+    0 0 0 6px #1a1d22,
+    0 8px 14px rgba(0,0,0,.55),
+    inset 0 3px 0 rgba(255,255,255,.16) !important;
   display: grid;
   place-items: center;
-  z-index: 4;
+  z-index: 5;
+  transform: translateZ(22px);
+  transform-style: preserve-3d;
+}
+
+.bmw-wheel .hub-face {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 30%, rgba(255,255,255,.1), transparent 55%);
+  pointer-events: none;
 }
 
 .bmw-roundel {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   overflow: hidden;
   background: #fff;
-  box-shadow: 0 0 0 2px #1a1d22;
+  box-shadow:
+    0 0 0 2px #1a1d22,
+    0 3px 6px rgba(0,0,0,.4);
+  transform: translateZ(6px);
+  z-index: 2;
 }
 
 .bmw-ring {
@@ -2161,7 +3058,11 @@ html, body {
 .bmw-quad.q4 { right: 0; bottom: 0; background: #1664b0; }
 
 .bmw-wheel .hub.flash {
-  filter: brightness(1.4);
+  filter: brightness(1.45);
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px #1a1d22,
+    0 0 18px rgba(255,220,120,.55) !important;
 }
 
 .shift-hint {
@@ -2254,20 +3155,129 @@ html, body {
   50% { box-shadow: 0 0 0 8px rgba(255,200,80,0); }
 }
 
+/* —— Kupé: mittkonsol + pedaler —— */
+.console-rail {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: min(120px, 22vw);
+  height: 42%;
+  transform: translateX(-50%);
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, #1a1214 0%, #120a0c 40%, #0a0608 100%);
+  clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
+  box-shadow: inset 0 0 16px rgba(0,0,0,.5);
+  opacity: 0.9;
+}
+
+.console-cup {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  width: 22px;
+  height: 22px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #2a2226, #0a080a);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.7), 0 0 0 2px #3a3236;
+}
+
+.console-pad {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 12%;
+  height: 28%;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.03) 3px 4px),
+    linear-gradient(180deg, #2a1c20, #140c0e);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.pedal-bay {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  transform: translateX(calc(-50% - 70px));
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.pedal {
+  width: 18px;
+  height: 34px;
+  border-radius: 3px 3px 2px 2px;
+  background:
+    repeating-linear-gradient(0deg, #2a2e34 0 3px, #12151a 3px 5px);
+  border: 1px solid #4a5058;
+  box-shadow: 0 4px 0 #05070a, inset 0 1px 0 rgba(255,255,255,.1);
+}
+
+.pedal.clutch { height: 28px; width: 14px; opacity: 0.7; }
+.pedal.brake {
+  height: 32px;
+  width: 16px;
+  background:
+    repeating-linear-gradient(0deg, #3a2226 0 3px, #1a0c0e 3px 5px);
+  border-color: #6a4044;
+}
+.pedal.gas {
+  height: 38px;
+  width: 20px;
+  background:
+    repeating-linear-gradient(0deg, #2a323c 0 3px, #0e1218 3px 5px);
+}
+
+.sport-cockpit .dial-face {
+  fill: #0a0e12;
+  stroke: #5a6878;
+  stroke-width: 3.5;
+}
+
+.sport-cockpit .cluster.fuel-only {
+  background:
+    linear-gradient(160deg, #1a1e24 0%, #0a0c10 50%, #06080c 100%);
+  border-color: #4a5664;
+  box-shadow:
+    inset 0 0 16px rgba(0,0,0,.65),
+    0 0 0 1px rgba(255,255,255,.05),
+    0 6px 0 #05070a;
+}
+
+@media (max-width: 900px) {
+  .dash-row {
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .car-screen { width: min(280px, 90%); }
+  .right-panel { flex-direction: row; flex-wrap: wrap; justify-content: center; min-width: 0; }
+}
+
 @media (max-width: 700px) {
-  .dash-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.85fr); gap: 0.4rem; }
+  .dash-row { gap: 0.4rem; }
   .dial { width: 52px; }
   .dial-svg { width: 48px; height: 48px; }
   .speedo strong { font-size: 1.55rem; }
   .side-mirror { top: 24%; height: 58px; }
   .center-mirror { height: 56px; }
-  .minimap-wrap { width: 110px; height: 110px; bottom: 16%; }
+  .minimap-wrap { width: 128px; height: 128px; bottom: 16%; }
   .bmw-wheel,
   .steering {
-    width: 112px !important;
-    height: 112px !important;
-    min-width: 112px !important;
-    min-height: 112px !important;
+    width: 120px !important;
+    height: 120px !important;
+    min-width: 120px !important;
+    min-height: 120px !important;
   }
   .shifter-gate { width: 64px; height: 84px; }
+  .pedal-bay { display: none; }
+  .console-rail { width: 80px; height: 36%; }
+  .seat-wing { width: 10%; height: 22%; }
+  .screen-glass { min-height: 150px; }
 }

@@ -78,25 +78,52 @@
       <div class="glass" aria-hidden="true"></div>
       <div class="side-window left-win" aria-hidden="true"></div>
       <div class="side-window right-win" aria-hidden="true"></div>
-      <div class="a-pillar left" aria-hidden="true"></div>
-      <div class="a-pillar right" aria-hidden="true"></div>
-      <div class="roof-liner" aria-hidden="true"></div>
+      <div class="a-pillar left" aria-hidden="true">
+        <span class="pillar-trim"></span>
+        <span class="grab-handle"></span>
+      </div>
+      <div class="a-pillar right" aria-hidden="true">
+        <span class="pillar-trim"></span>
+      </div>
+      <div class="roof-liner" aria-hidden="true">
+        <span class="dome-light"></span>
+        <span class="sun-visor left-visor"></span>
+        <span class="sun-visor right-visor"></span>
+      </div>
       <div class="window-frame" aria-hidden="true"></div>
       <div class="door-card left-door-card" aria-hidden="true">
+        <span class="door-leather"></span>
+        <span class="door-armrest"></span>
         <span class="door-handle-inner"></span>
+        <span class="door-lock-pin"></span>
+        <span class="door-window-switch"></span>
         <span class="door-speaker"></span>
+        <span class="door-ambient"></span>
       </div>
       <div class="door-card right-door-card" aria-hidden="true">
+        <span class="door-leather"></span>
+        <span class="door-armrest"></span>
         <span class="door-handle-inner"></span>
+        <span class="door-lock-pin"></span>
+        <span class="door-window-switch"></span>
         <span class="door-speaker"></span>
+        <span class="door-ambient"></span>
       </div>
-      <div class="dash-shelf" aria-hidden="true"></div>
+      <div class="seat-wing left-seat" aria-hidden="true"></div>
+      <div class="seat-wing right-seat" aria-hidden="true"></div>
+      <div class="dash-shelf" aria-hidden="true">
+        <span class="dash-carbon"></span>
+        <span class="dash-defrost"></span>
+        <span class="dash-stitch-line"></span>
+      </div>
       <div class="seatbelt-visual" id="seatbeltVisual" hidden aria-hidden="true">
         <span class="belt-diag"></span>
+        <span class="belt-retractor"></span>
         <span class="belt-lap-bar"></span>
       </div>
       <div class="door-open-overlay" id="doorOverlay" hidden></div>
       <div class="mirror center-mirror" aria-hidden="true">
+        <span class="mirror-stem"></span>
         <canvas id="rear" width="200" height="70"></canvas>
       </div>
       <div class="mirror side-mirror left-mirror" aria-hidden="true">
@@ -107,8 +134,8 @@
       </div>
 
       <div class="minimap-wrap" aria-label="Karta">
-        <canvas id="minimap" width="160" height="160"></canvas>
-        <span class="minimap-label">Karta</span>
+        <canvas id="minimap" width="200" height="200"></canvas>
+        <span class="minimap-label">GPS</span>
       </div>
 
       <div class="hood sport-hood" aria-hidden="true"></div>
@@ -116,10 +143,22 @@
     </div>
 
     <div class="cockpit sport-cockpit" id="cockpit" hidden>
+      <div class="cabin-ambient" aria-hidden="true"></div>
       <div class="dash-top">
         <span class="dash-vent left"></span>
+        <span class="dash-clock" aria-hidden="true"></span>
         <span class="dash-stitch"></span>
         <span class="dash-vent right"></span>
+        <span class="dash-chrome"></span>
+      </div>
+      <div class="console-rail" aria-hidden="true">
+        <span class="console-cup"></span>
+        <span class="console-pad"></span>
+      </div>
+      <div class="pedal-bay" aria-hidden="true">
+        <span class="pedal clutch"></span>
+        <span class="pedal brake"></span>
+        <span class="pedal gas"></span>
       </div>
       <div class="dash-row">
         <div class="cluster fuel-only">
@@ -160,6 +199,13 @@
             </div>
 
             <div class="steering bmw-wheel" id="steering" aria-label="BMW-ratt">
+              <div class="rim-3d" aria-hidden="true">
+                <span class="rim-back"></span>
+                <span class="rim-side"></span>
+                <span class="rim-front"></span>
+                <span class="rim-grip"></span>
+                <span class="rim-stitch"></span>
+              </div>
               <div class="rim"></div>
               <div class="spoke s-left">
                 <span class="mf-btn"></span>
@@ -171,6 +217,7 @@
               </div>
               <div class="spoke s-bottom"></div>
               <div class="hub">
+                <span class="hub-face"></span>
                 <span class="bmw-roundel" aria-hidden="true">
                   <span class="bmw-ring"></span>
                   <span class="bmw-quad q1"></span>
@@ -238,6 +285,36 @@
           </div>
         </div>
 
+        <div class="car-screen" id="carScreen" aria-label="Bilskärm">
+          <div class="screen-bezel">
+            <div class="screen-glass" id="screenGlass">
+              <div class="screen-bar">
+                <span class="screen-time" id="screenTime">12:00</span>
+                <span class="screen-brand">Nermin OS</span>
+                <span class="screen-signal" id="screenSignal">●●●</span>
+              </div>
+
+              <div class="screen-home" id="screenHome">
+                <p class="screen-greeting">Välj en app</p>
+                <div class="screen-apps" id="screenApps" role="list"></div>
+              </div>
+
+              <div class="screen-app" id="screenApp" hidden>
+                <div class="screen-app-head">
+                  <button type="button" class="screen-back" id="screenBack" aria-label="Tillbaka till appar">←</button>
+                  <strong id="screenAppTitle">App</strong>
+                </div>
+                <div class="screen-app-body" id="screenAppBody"></div>
+              </div>
+
+              <div class="screen-off" id="screenOff" hidden>
+                <p>Skärm av</p>
+                <button type="button" class="screen-wake" id="screenWake">Slå på</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="right-panel">
           <div class="drive-mode" id="driveMode" role="group" aria-label="Körläge">
             <button type="button" class="mode-btn comfort on" id="modeComfort" aria-pressed="true">Komfort</button>
@@ -256,6 +333,42 @@
               <span class="buckle-tongue" id="buckleTongue"></span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="yt-overlay" id="ytOverlay" hidden>
+      <div class="yt-panel" role="dialog" aria-modal="true" aria-labelledby="ytTitle">
+        <div class="yt-head">
+          <strong id="ytTitle">YouTube</strong>
+          <button type="button" class="yt-close" id="ytClose" aria-label="Stäng YouTube">✕</button>
+        </div>
+        <div class="yt-player-wrap">
+          <iframe
+            id="ytFrame"
+            title="YouTube"
+            src=""
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"
+          ></iframe>
+          <div class="yt-placeholder" id="ytPlaceholder">
+            <p>Välj en video eller klistra in en YouTube-länk</p>
+          </div>
+        </div>
+        <div class="yt-controls">
+          <div class="yt-presets" id="ytPresets"></div>
+          <form class="yt-form" id="ytForm">
+            <input
+              id="ytInput"
+              class="yt-input"
+              type="url"
+              placeholder="Klistra in YouTube-länk…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="submit" class="yt-go">Spela</button>
+          </form>
         </div>
       </div>
     </div>
