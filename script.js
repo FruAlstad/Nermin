@@ -63,8 +63,8 @@
   const SEG_LEN = 200;
   const ROAD_W = 2000;
   const CAM_H = 1000;
-  const CAM_DEPTH = 0.92;
-  const DRAW_DIST = 180;
+  const CAM_DEPTH = 0.84;
+  const DRAW_DIST = 160;
 
   const state = {
     // outside -> doorOpen -> insideOpen -> insideClosed -> pickup -> insert -> belt -> drive
@@ -104,7 +104,6 @@
     heading: 0, // radianer, 0 = norr (+Z)
     traffic: [],
     input: { left: false, right: false, up: false, down: false },
-    wheelDragging: false,
   };
 
   // Oval bana + mittkorsning för kartan
@@ -142,579 +141,62 @@
     });
   }
 
-  const audio = { ctx: null, master: null, engine: null, noise: null, sfx: null, music: null };
-
-  function makeNoiseBuffer(ctx, seconds = 2) {
-    const len = Math.floor(seconds * ctx.sampleRate);
-    const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-    return buffer;
-  }
+  const audio = { ctx: null, master: null, engine: null, noise: null, sfx: null };
 
   function ensureAudio() {
     if (audio.ctx) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     audio.ctx = new AC();
-    const ctx = audio.ctx;
-
-    audio.master = ctx.createGain();
+    audio.master = audio.ctx.createGain();
     audio.master.gain.value = 0;
-    audio.master.connect(ctx.destination);
+    audio.master.connect(audio.ctx.destination);
 
-    // —— Bensinmotor (V8-känsla): dunk + avgaser + gasbrus ——
-    const engBus = ctx.createGain();
-    engBus.gain.value = 1;
-
-    // Avgasgrund (djup sågtand)
-    const exhaust = ctx.createOscillator();
-    const exhaustGain = ctx.createGain();
-    const exhaustFilter = ctx.createBiquadFilter();
-    exhaust.type = "sawtooth";
-    exhaust.frequency.value = 55;
-    exhaustFilter.type = "lowpass";
-    exhaustFilter.frequency.value = 380;
-    exhaustFilter.Q.value = 0.7;
-    exhaustGain.gain.value = 0.55;
-    exhaust.connect(exhaustFilter);
-    exhaustFilter.connect(exhaustGain);
-    exhaustGain.connect(engBus);
-
-    // Cylinderdunk (smal fyrkant = “pop”)
-    const pulse = ctx.createOscillator();
-    const pulseGain = ctx.createGain();
-    const pulseFilter = ctx.createBiquadFilter();
-    pulse.type = "square";
-    pulse.frequency.value = 28;
-    pulseFilter.type = "bandpass";
-    pulseFilter.frequency.value = 120;
-    pulseFilter.Q.value = 2.2;
-    pulseGain.gain.value = 0.42;
-    pulse.connect(pulseFilter);
-    pulseFilter.connect(pulseGain);
-    pulseGain.connect(engBus);
-
-    // Övre harmoniska / “rasp” vid varv
-    const rasp = ctx.createOscillator();
-    const raspGain = ctx.createGain();
-    const raspFilter = ctx.createBiquadFilter();
-    rasp.type = "sawtooth";
-    rasp.frequency.value = 110;
-    raspFilter.type = "bandpass";
-    raspFilter.frequency.value = 520;
-    raspFilter.Q.value = 1.4;
-    raspGain.gain.value = 0.18;
-    rasp.connect(raspFilter);
-    raspFilter.connect(raspGain);
-    raspGain.connect(engBus);
-
-    // Amplitude-modulering i takt med tändning (4-takts V8 ≈ rpm/15 Hz)
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    const am = ctx.createGain();
-    lfo.type = "sine";
-    lfo.frequency.value = 40;
-    lfoGain.gain.value = 0.35;
-    am.gain.value = 0.65;
-    lfo.connect(lfoGain);
-    lfoGain.connect(am.gain);
-    engBus.connect(am);
-
-    // Mild “dist” via wave shaper → mer rå bensinljud
-    const shaper = ctx.createWaveShaper();
-    const curve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) {
-      const x = (i / 128) - 1;
-      curve[i] = ((Math.PI + 4) * x) / (Math.PI + 4 * Math.abs(x));
-    }
-    shaper.curve = curve;
-    shaper.oversample = "2x";
-
-    const bodyFilter = ctx.createBiquadFilter();
-    bodyFilter.type = "lowpass";
-    bodyFilter.frequency.value = 900;
-    bodyFilter.Q.value = 0.9;
-
-    const engGain = ctx.createGain();
-    engGain.gain.value = 0.7;
-    am.connect(shaper);
-    shaper.connect(bodyFilter);
-    bodyFilter.connect(engGain);
+    const oscA = audio.ctx.createOscillator();
+    const oscB = audio.ctx.createOscillator();
+    const oscC = audio.ctx.createOscillator();
+    const filter = audio.ctx.createBiquadFilter();
+    const engGain = audio.ctx.createGain();
+    filter.type = "lowpass";
+    filter.frequency.value = 220;
+    oscA.type = "sawtooth";
+    oscB.type = "square";
+    oscC.type = "triangle";
+    oscA.frequency.value = 48;
+    oscB.frequency.value = 24;
+    oscC.frequency.value = 96;
+    engGain.gain.value = 0.5;
+    oscA.connect(filter);
+    oscB.connect(filter);
+    oscC.connect(engGain);
+    filter.connect(engGain);
     engGain.connect(audio.master);
+    oscA.start();
+    oscB.start();
+    oscC.start();
 
-    exhaust.start();
-    pulse.start();
-    rasp.start();
-    lfo.start();
+    const bufferSize = 2 * audio.ctx.sampleRate;
+    const buffer = audio.ctx.createBuffer(1, bufferSize, audio.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const noise = audio.ctx.createBufferSource();
+    noise.buffer = buffer;
+    noise.loop = true;
+    const noiseFilter = audio.ctx.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.value = 700;
+    const noiseGain = audio.ctx.createGain();
+    noiseGain.gain.value = 0;
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(audio.master);
+    noise.start();
 
-    // Förbränningsbrus + vägbrus
-    const noiseBuf = makeNoiseBuffer(ctx, 2.5);
-    const combustion = ctx.createBufferSource();
-    combustion.buffer = noiseBuf;
-    combustion.loop = true;
-    const combFilter = ctx.createBiquadFilter();
-    combFilter.type = "bandpass";
-    combFilter.frequency.value = 280;
-    combFilter.Q.value = 1.1;
-    const combGain = ctx.createGain();
-    combGain.gain.value = 0;
-    combustion.connect(combFilter);
-    combFilter.connect(combGain);
-    combGain.connect(audio.master);
-    combustion.start();
-
-    const road = ctx.createBufferSource();
-    road.buffer = noiseBuf;
-    road.loop = true;
-    const roadFilter = ctx.createBiquadFilter();
-    roadFilter.type = "bandpass";
-    roadFilter.frequency.value = 700;
-    roadFilter.Q.value = 0.8;
-    const roadGain = ctx.createGain();
-    roadGain.gain.value = 0;
-    road.connect(roadFilter);
-    roadFilter.connect(roadGain);
-    roadGain.connect(audio.master);
-    road.start();
-
-    // Insug / gas när man trycker W
-    const intake = ctx.createBufferSource();
-    intake.buffer = noiseBuf;
-    intake.loop = true;
-    const intakeFilter = ctx.createBiquadFilter();
-    intakeFilter.type = "highpass";
-    intakeFilter.frequency.value = 900;
-    const intakeGain = ctx.createGain();
-    intakeGain.gain.value = 0;
-    intake.connect(intakeFilter);
-    intakeFilter.connect(intakeGain);
-    intakeGain.connect(audio.master);
-    intake.start();
-
-    audio.engine = {
-      exhaust,
-      exhaustGain,
-      exhaustFilter,
-      pulse,
-      pulseGain,
-      pulseFilter,
-      rasp,
-      raspGain,
-      raspFilter,
-      lfo,
-      lfoGain,
-      bodyFilter,
-      engGain,
-      combFilter,
-      combGain,
-      intakeFilter,
-      intakeGain,
-    };
-    audio.noise = { filter: roadFilter, gain: roadGain };
-    audio.sfx = ctx.createGain();
+    audio.engine = { oscA, oscB, oscC, filter, engGain };
+    audio.noise = { filter: noiseFilter, gain: noiseGain };
+    audio.sfx = audio.ctx.createGain();
     audio.sfx.gain.value = 0.2;
-    audio.sfx.connect(ctx.destination);
-
-    // Musikbus (separat från motor)
-    const musicGain = ctx.createGain();
-    musicGain.gain.value = 0;
-    musicGain.connect(ctx.destination);
-    audio.music = {
-      gain: musicGain,
-      playing: false,
-      mode: "music", // "music" | "radio"
-      track: 0,
-      station: 0,
-      step: 0,
-      nextTime: 0,
-      timer: null,
-      staticGain: null,
-      staticSrc: null,
-    };
-  }
-
-  // —— Genererad bilmusik (4 låtar) ——
-  const MUSIC_TRACKS = [
-    {
-      name: "Nermin Drive",
-      bpm: 112,
-      root: 52,
-      melody: [0, 2, 4, 2, 5, 4, 2, 0, 4, 5, 7, 5, 4, 2, 0, 2],
-      bass: [0, 0, 4, 4, 5, 5, 4, 4, 0, 0, 5, 5, 4, 4, 0, 0],
-      wave: "triangle",
-      bassWave: "sawtooth",
-      filter: 1800,
-    },
-    {
-      name: "Night Road",
-      bpm: 96,
-      root: 48,
-      melody: [0, 3, 5, 3, 7, 5, 3, 0, 5, 7, 10, 7, 5, 3, 0, 3],
-      bass: [0, 0, 5, 5, 3, 3, 7, 7, 0, 0, 3, 3, 5, 5, 0, 0],
-      wave: "sine",
-      bassWave: "triangle",
-      filter: 1200,
-    },
-    {
-      name: "Coastline",
-      bpm: 124,
-      root: 55,
-      melody: [4, 2, 0, 2, 5, 7, 5, 4, 2, 4, 7, 9, 7, 5, 4, 2],
-      bass: [0, 4, 5, 4, 0, 4, 7, 4, 0, 5, 4, 2, 0, 4, 5, 0],
-      wave: "square",
-      bassWave: "sawtooth",
-      filter: 2200,
-    },
-    {
-      name: "Redline",
-      bpm: 138,
-      root: 50,
-      melody: [0, 3, 5, 7, 5, 3, 0, 5, 7, 8, 10, 8, 7, 5, 3, 0],
-      bass: [0, 0, 0, 3, 5, 5, 5, 3, 0, 0, 7, 5, 3, 3, 0, 0],
-      wave: "sawtooth",
-      bassWave: "square",
-      filter: 2600,
-    },
-  ];
-
-  // —— Radiokanaler ——
-  const RADIO_STATIONS = [
-    {
-      name: "P3 99.2",
-      short: "P3",
-      bpm: 118,
-      root: 57,
-      melody: [0, 4, 7, 4, 9, 7, 4, 0, 5, 7, 11, 7, 4, 2, 0, 4],
-      bass: [0, 0, 5, 5, 7, 7, 5, 5, 0, 0, 4, 4, 5, 5, 0, 0],
-      wave: "triangle",
-      bassWave: "sine",
-      filter: 2000,
-      static: 0.02,
-      vol: 1,
-    },
-    {
-      name: "Mix Megapol",
-      short: "Mix",
-      bpm: 128,
-      root: 60,
-      melody: [0, 2, 4, 7, 4, 2, 0, 4, 7, 9, 7, 4, 2, 4, 0, 2],
-      bass: [0, 0, 0, 4, 5, 5, 5, 4, 0, 0, 7, 5, 4, 4, 0, 0],
-      wave: "square",
-      bassWave: "sawtooth",
-      filter: 2400,
-      static: 0.015,
-      vol: 1,
-    },
-    {
-      name: "NRJ",
-      short: "NRJ",
-      bpm: 132,
-      root: 55,
-      melody: [0, 3, 5, 7, 10, 7, 5, 3, 0, 5, 7, 10, 12, 10, 7, 5],
-      bass: [0, 0, 3, 3, 5, 5, 7, 7, 0, 0, 5, 5, 3, 3, 0, 0],
-      wave: "sawtooth",
-      bassWave: "square",
-      filter: 2800,
-      static: 0.025,
-      vol: 1,
-    },
-    {
-      name: "Rockklassiker",
-      short: "Rock",
-      // Klassisk rock-groove: powerchords Em–G–D–A-känsla
-      bpm: 120,
-      root: 52, // E
-      melody: [0, 0, 0, 3, 7, 7, 5, 3, 0, 0, 7, 5, 3, 5, 7, 12],
-      bass: [0, 0, 0, 0, 3, 3, 3, 3, 7, 7, 7, 5, 0, 0, 5, 7],
-      wave: "sawtooth",
-      bassWave: "sawtooth",
-      filter: 3200,
-      static: 0.012,
-      vol: 1.45,
-      style: "rock",
-    },
-  ];
-
-  function midiToHz(midi) {
-    return 440 * Math.pow(2, (midi - 69) / 12);
-  }
-
-  function scheduleMusicNote(freq, start, dur, type, vol, filterFreq) {
-    if (!audio.ctx || !audio.music) return;
-    const ctx = audio.ctx;
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    const f = ctx.createBiquadFilter();
-    o.type = type;
-    o.frequency.value = freq;
-    f.type = "lowpass";
-    f.frequency.value = filterFreq;
-    o.connect(f);
-    f.connect(g);
-    g.connect(audio.music.gain);
-    g.gain.setValueAtTime(0.0001, start);
-    g.gain.exponentialRampToValueAtTime(vol, start + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-    o.start(start);
-    o.stop(start + dur + 0.02);
-  }
-
-  function scheduleDrum(start, kind, rock = false) {
-    if (!audio.ctx || !audio.music) return;
-    const ctx = audio.ctx;
-    if (kind === "kick") {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.setValueAtTime(rock ? 160 : 140, start);
-      o.frequency.exponentialRampToValueAtTime(38, start + 0.14);
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(rock ? 0.48 : 0.35, start + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
-      o.connect(g);
-      g.connect(audio.music.gain);
-      o.start(start);
-      o.stop(start + 0.18);
-    } else if (kind === "snare") {
-      const buf = makeNoiseBuffer(ctx, 0.12);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const f = ctx.createBiquadFilter();
-      f.type = "bandpass";
-      f.frequency.value = 1800;
-      f.Q.value = 0.8;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(rock ? 0.28 : 0.16, start + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.1);
-      src.connect(f);
-      f.connect(g);
-      g.connect(audio.music.gain);
-      src.start(start);
-      src.stop(start + 0.12);
-      // Snare-body
-      const o = ctx.createOscillator();
-      const og = ctx.createGain();
-      o.type = "triangle";
-      o.frequency.setValueAtTime(180, start);
-      o.frequency.exponentialRampToValueAtTime(90, start + 0.08);
-      og.gain.setValueAtTime(0.0001, start);
-      og.gain.exponentialRampToValueAtTime(0.12, start + 0.005);
-      og.gain.exponentialRampToValueAtTime(0.0001, start + 0.09);
-      o.connect(og);
-      og.connect(audio.music.gain);
-      o.start(start);
-      o.stop(start + 0.1);
-    } else if (kind === "hat") {
-      const buf = makeNoiseBuffer(ctx, 0.05);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const f = ctx.createBiquadFilter();
-      f.type = "highpass";
-      f.frequency.value = rock ? 7000 : 6000;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(rock ? 0.11 : 0.08, start + 0.005);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.04);
-      src.connect(f);
-      f.connect(g);
-      g.connect(audio.music.gain);
-      src.start(start);
-      src.stop(start + 0.05);
-    }
-  }
-
-  function currentPlaylist() {
-    const m = audio.music;
-    if (!m) return null;
-    if (m.mode === "radio") return RADIO_STATIONS[m.station % RADIO_STATIONS.length];
-    return MUSIC_TRACKS[m.track % MUSIC_TRACKS.length];
-  }
-
-  function ensureRadioStatic() {
-    if (!audio.ctx || !audio.music) return;
-    const m = audio.music;
-    if (m.staticSrc) return;
-    const ctx = audio.ctx;
-    const buf = makeNoiseBuffer(ctx, 1.5);
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    const f = ctx.createBiquadFilter();
-    f.type = "bandpass";
-    f.frequency.value = 1800;
-    f.Q.value = 0.6;
-    const g = ctx.createGain();
-    g.gain.value = 0;
-    src.connect(f);
-    f.connect(g);
-    g.connect(m.gain);
-    src.start();
-    m.staticSrc = src;
-    m.staticGain = g;
-    m.staticFilter = f;
-  }
-
-  function setRadioStaticLevel(level) {
-    if (!audio.music?.staticGain || !audio.ctx) return;
-    audio.music.staticGain.gain.setTargetAtTime(level, audio.ctx.currentTime, 0.08);
-  }
-
-  function musicTick() {
-    if (!audio.ctx || !audio.music || !audio.music.playing) return;
-    const ctx = audio.ctx;
-    const m = audio.music;
-    const track = currentPlaylist();
-    if (!track) return;
-    const rock = track.style === "rock";
-    const stepSec = 60 / track.bpm / 2;
-    const lookAhead = 0.18;
-    const volMul = track.vol || 1;
-    const melVol = (m.mode === "radio" ? 0.1 : 0.09) * volMul;
-    const bassVol = (m.mode === "radio" ? 0.11 : 0.12) * volMul;
-
-    while (m.nextTime < ctx.currentTime + lookAhead) {
-      const i = m.step % 16;
-      const t = m.nextTime;
-
-      if (rock) {
-        // Rockbeat: kick på 1+3, snare på 2+4, hihat åttondelar
-        if (i % 8 === 0 || i % 8 === 6) scheduleDrum(t, "kick", true);
-        if (i % 8 === 4) scheduleDrum(t, "snare", true);
-        scheduleDrum(t, "hat", true);
-      } else {
-        if (i % 4 === 0) scheduleDrum(t, "kick");
-        if (i % 2 === 1) scheduleDrum(t, "hat");
-      }
-
-      const melDeg = track.melody[i];
-      const bassDeg = track.bass[i];
-      const melMidi = track.root + 12 + melDeg;
-      const bassMidi = track.root + bassDeg;
-
-      if (rock) {
-        // Powerchord: grundton + kvint (+ oktav ibland)
-        scheduleMusicNote(midiToHz(melMidi), t, stepSec * 0.9, "sawtooth", melVol * 1.1, track.filter);
-        scheduleMusicNote(midiToHz(melMidi + 7), t, stepSec * 0.9, "sawtooth", melVol * 0.75, track.filter * 0.85);
-        if (i % 4 === 0) {
-          scheduleMusicNote(midiToHz(melMidi + 12), t, stepSec * 0.5, "square", melVol * 0.35, track.filter);
-        }
-        // Tung bas varje slag
-        scheduleMusicNote(midiToHz(bassMidi), t, stepSec * 0.95, "sawtooth", bassVol * 1.2, 700);
-        if (i % 2 === 0) {
-          scheduleMusicNote(midiToHz(bassMidi + 12), t, stepSec * 0.4, "triangle", bassVol * 0.35, 900);
-        }
-      } else {
-        scheduleMusicNote(midiToHz(melMidi), t, stepSec * 0.85, track.wave, melVol, track.filter);
-        if (i % 2 === 0) {
-          scheduleMusicNote(midiToHz(bassMidi), t, stepSec * 1.5, track.bassWave, bassVol, 500);
-        }
-      }
-
-      m.nextTime += stepSec;
-      m.step += 1;
-    }
-  }
-
-  function startPlayback(mode, index) {
-    ensureAudio();
-    if (!audio.ctx || !audio.music) return;
-    audio.ctx.resume();
-    const m = audio.music;
-    m.mode = mode;
-    if (mode === "radio") {
-      if (typeof index === "number") m.station = index;
-      carScreenState.radioOn = true;
-      carScreenState.musicOn = false;
-      ensureRadioStatic();
-      const st = RADIO_STATIONS[m.station % RADIO_STATIONS.length];
-      setRadioStaticLevel(st.static || 0.02);
-    } else {
-      if (typeof index === "number") m.track = index;
-      carScreenState.musicOn = true;
-      carScreenState.radioOn = false;
-      setRadioStaticLevel(0);
-    }
-    m.playing = true;
-    m.step = 0;
-    m.nextTime = audio.ctx.currentTime + 0.05;
-    const st = mode === "radio" ? RADIO_STATIONS[m.station % RADIO_STATIONS.length] : null;
-    const masterVol = mode === "radio" ? (st?.style === "rock" ? 0.72 : 0.5) : 0.55;
-    m.gain.gain.cancelScheduledValues(audio.ctx.currentTime);
-    m.gain.gain.setTargetAtTime(masterVol, audio.ctx.currentTime, 0.08);
-    if (m.timer) clearInterval(m.timer);
-    musicTick();
-    m.timer = setInterval(musicTick, 40);
-  }
-
-  function startMusic(trackIndex) {
-    startPlayback("music", trackIndex);
-  }
-
-  function stopMusic() {
-    if (!audio.music || !audio.ctx) return;
-    const m = audio.music;
-    m.playing = false;
-    if (m.timer) {
-      clearInterval(m.timer);
-      m.timer = null;
-    }
-    setRadioStaticLevel(0);
-    m.gain.gain.cancelScheduledValues(audio.ctx.currentTime);
-    m.gain.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.12);
-    carScreenState.musicOn = false;
-    carScreenState.radioOn = false;
-  }
-
-  function toggleMusic() {
-    ensureAudio();
-    audio.ctx?.resume();
-    if (audio.music?.playing && audio.music.mode === "music") {
-      stopMusic();
-    } else {
-      startMusic(carScreenState.track);
-    }
-  }
-
-  function nextMusicTrack() {
-    ensureAudio();
-    audio.ctx?.resume();
-    carScreenState.track = (carScreenState.track + 1) % MUSIC_TRACKS.length;
-    startMusic(carScreenState.track);
-  }
-
-  function startRadio(stationIndex) {
-    startPlayback("radio", stationIndex);
-  }
-
-  function stopRadio() {
-    if (audio.music?.mode === "radio") stopMusic();
-    else {
-      carScreenState.radioOn = false;
-    }
-  }
-
-  function toggleRadio() {
-    ensureAudio();
-    audio.ctx?.resume();
-    if (audio.music?.playing && audio.music.mode === "radio") {
-      stopRadio();
-    } else {
-      startRadio(carScreenState.radio);
-    }
-  }
-
-  function changeRadioStation(delta) {
-    ensureAudio();
-    audio.ctx?.resume();
-    const n = RADIO_STATIONS.length;
-    carScreenState.radio = (carScreenState.radio + delta + n) % n;
-    // Kort statisk “surr” när man byter kanal, sedan spela
-    ensureRadioStatic();
-    setRadioStaticLevel(0.14);
-    const station = carScreenState.radio;
-    setTimeout(() => startRadio(station), 160);
+    audio.sfx.connect(audio.ctx.destination);
   }
 
   function playDoorSound(open) {
@@ -769,73 +251,20 @@
 
   function setEngineSound() {
     if (!audio.ctx || !audio.engine) return;
-    const e = audio.engine;
     const gas = state.input.up && state.engineOn && state.phase === "drive";
     const rev = state.rev || 0;
     const rpm = state.rpm || (700 + Math.abs(state.speed) * 55 + (gas ? 350 : 0) + (state.engineOn ? 80 : 0));
     const t = audio.ctx.currentTime;
-    const sport = state.driveMode === "sport";
-
-    // Ojämn förbränning (riktig bensinmotor går inte perfekt jämnt)
-    const jitter = gas
-      ? Math.sin(t * 29) * 22 + Math.sin(t * 47) * 12 + Math.sin(t * 73) * 6
-      : Math.sin(t * 9) * 5;
-    const r = Math.max(600, rpm + jitter);
-
-    // V8 4-takt: tändfrekvens ≈ rpm/15, vevaxel ≈ rpm/60
-    const crankHz = r / 60;
-    const fireHz = r / 15;
-    const smooth = gas ? 0.04 : 0.09;
-
-    e.exhaust.frequency.setTargetAtTime(crankHz * 1.05, t, smooth);
-    e.pulse.frequency.setTargetAtTime(fireHz, t, smooth);
-    e.rasp.frequency.setTargetAtTime(crankHz * 2.15, t, smooth);
-    e.lfo.frequency.setTargetAtTime(fireHz, t, smooth);
-
-    // Mer öppet avgassystem när man gasar / sport
-    const bodyOpen = 520 + r * 0.09 + rev * 900 + (gas ? 280 : 0) + (sport ? 180 : 0);
-    e.bodyFilter.frequency.setTargetAtTime(bodyOpen, t, 0.06);
-    e.exhaustFilter.frequency.setTargetAtTime(220 + r * 0.04 + (gas ? 160 : 0), t, 0.07);
-    e.pulseFilter.frequency.setTargetAtTime(90 + r * 0.02 + (gas ? 40 : 0), t, 0.07);
-    e.raspFilter.frequency.setTargetAtTime(400 + r * 0.08 + rev * 500, t, 0.06);
-
-    // Dunk och rasp starkare under gas
-    e.pulseGain.gain.setTargetAtTime(gas ? 0.55 : 0.28, t, 0.05);
-    e.raspGain.gain.setTargetAtTime((gas ? 0.28 : 0.1) * (sport ? 1.35 : 0.85), t, 0.05);
-    e.lfoGain.gain.setTargetAtTime(gas ? 0.42 : 0.22, t, 0.06);
-    e.exhaustGain.gain.setTargetAtTime(gas ? 0.62 : 0.4, t, 0.06);
-
-    // Förbränningsbrus
-    e.combFilter.frequency.setTargetAtTime(200 + r * 0.035 + (gas ? 80 : 0), t, 0.08);
-    e.combGain.gain.setTargetAtTime(
-      state.engineOn ? (0.04 + (gas ? 0.09 : 0.03) + rev * 0.12) * (sport ? 1.3 : 0.85) : 0,
-      t,
-      0.07
-    );
-
-    // Insugsljud när man gasar
-    e.intakeFilter.frequency.setTargetAtTime(700 + rev * 1400 + (gas ? 400 : 0), t, 0.05);
-    e.intakeGain.gain.setTargetAtTime(gas ? (sport ? 0.09 : 0.045) + rev * 0.06 : 0, t, 0.04);
-
-    const loud = sport ? 1.65 : 0.62;
-    const load = gas ? 1.2 : 0.82;
-    const vol = state.engineOn
-      ? (0.055 + Math.abs(state.speed) * 0.0011 + rev * (sport ? 0.26 : 0.1)) * loud * load
-      : 0;
-    audio.master.gain.setTargetAtTime(vol, t, sport ? 0.03 : 0.11);
-
+    audio.engine.oscA.frequency.setTargetAtTime(rpm / 14, t, 0.05);
+    audio.engine.oscB.frequency.setTargetAtTime(rpm / 28, t, 0.05);
+    audio.engine.oscC.frequency.setTargetAtTime(rpm / 9, t, 0.06);
+    audio.engine.filter.frequency.setTargetAtTime(180 + Math.abs(state.speed) * 4 + rev * 980, t, 0.05);
+    const loud = state.driveMode === "sport" ? 1.45 : 0.5;
+    const vol = state.engineOn ? (0.05 + Math.abs(state.speed) * 0.0011 + rev * (state.driveMode === "sport" ? 0.22 : 0.08)) * loud : 0;
+    audio.master.gain.setTargetAtTime(vol, t, state.driveMode === "sport" ? 0.04 : 0.14);
     if (audio.noise) {
-      const offroad = Math.abs(state.playerX) > 0.92 ? 0.00095 : 0.00036;
-      audio.noise.gain.gain.setTargetAtTime(
-        Math.abs(state.speed) * offroad + (state.bump > 0.2 ? 0.012 : 0),
-        t,
-        0.08
-      );
-      audio.noise.filter.frequency.setTargetAtTime(
-        400 + Math.abs(state.speed) * 11 + state.bump * 420,
-        t,
-        0.08
-      );
+      audio.noise.gain.gain.setTargetAtTime(Math.abs(state.speed) * 0.00035, t, 0.1);
+      audio.noise.filter.frequency.setTargetAtTime(500 + Math.abs(state.speed) * 8, t, 0.1);
     }
   }
 
@@ -944,10 +373,6 @@
     state.holdingKey = false;
     state.phase = "doorOpen";
     state.speed = 0;
-    stopMusic();
-    carScreenState.musicOn = false;
-    carScreenState.radioOn = false;
-    closeYouTube(true);
 
     app.classList.add("outside");
     exterior.hidden = false;
@@ -1041,479 +466,364 @@
 
   function drawSky(w, h, curveLean) {
     const horizon = h * 0.43;
-    const g = ctx.createLinearGradient(0, 0, 0, horizon + 8);
-    g.addColorStop(0, "#2a5f8f");
-    g.addColorStop(0.28, "#5a9bc4");
-    g.addColorStop(0.62, "#a8cfe0");
-    g.addColorStop(0.88, "#d4e6ee");
-    g.addColorStop(1, "#e8f0f2");
+    const g = ctx.createLinearGradient(0, 0, 0, horizon);
+    g.addColorStop(0, "#4e86b0");
+    g.addColorStop(0.55, "#9ec3d6");
+    g.addColorStop(1, "#d7e4ea");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
 
-    const sunX = w * 0.78 - curveLean * 40;
-    const sunY = h * 0.14;
-    const halo = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, 140);
-    halo.addColorStop(0, "rgba(255,248,220,1)");
-    halo.addColorStop(0.18, "rgba(255,236,180,0.55)");
-    halo.addColorStop(0.45, "rgba(255,220,160,0.12)");
-    halo.addColorStop(1, "rgba(255,220,160,0)");
-    ctx.fillStyle = halo;
+    const sunX = w * 0.8 - curveLean * 36;
+    const sunY = h * 0.16;
+    const glow = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 90);
+    glow.addColorStop(0, "rgba(255,244,210,0.95)");
+    glow.addColorStop(1, "rgba(255,244,210,0)");
+    ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 140, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 90, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#fff8e0";
+    ctx.fillStyle = "#fff6d2";
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 22, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 26, 0, Math.PI * 2);
     ctx.fill();
 
-    // Mjuka moln i lager
+    ctx.fillStyle = "rgba(255,255,255,0.88)";
     const clouds = [
-      [0.08, 0.12, 78, 0.55],
-      [0.22, 0.2, 52, 0.72],
-      [0.4, 0.1, 68, 0.5],
-      [0.58, 0.18, 44, 0.65],
-      [0.74, 0.13, 58, 0.48],
-      [0.9, 0.22, 36, 0.6],
+      [0.12, 0.14, 70],
+      [0.28, 0.22, 48],
+      [0.46, 0.11, 62],
+      [0.62, 0.2, 40],
     ];
-    for (const [cx, cy, rw, a] of clouds) {
-      const x = cx * w - curveLean * 28;
+    for (const [cx, cy, rw] of clouds) {
+      const x = cx * w - curveLean * 24;
       const y = cy * h;
-      ctx.fillStyle = `rgba(255,255,255,${a})`;
       ctx.beginPath();
-      ctx.ellipse(x, y, rw, rw * 0.36, 0, 0, Math.PI * 2);
-      ctx.ellipse(x + rw * 0.52, y + 5, rw * 0.68, rw * 0.3, 0, 0, Math.PI * 2);
-      ctx.ellipse(x - rw * 0.48, y + 7, rw * 0.52, rw * 0.26, 0, 0, Math.PI * 2);
-      ctx.ellipse(x + rw * 0.12, y - 8, rw * 0.4, rw * 0.22, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y, rw, rw * 0.38, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + rw * 0.55, y + 4, rw * 0.7, rw * 0.32, 0, 0, Math.PI * 2);
+      ctx.ellipse(x - rw * 0.5, y + 6, rw * 0.55, rw * 0.28, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Berg i tre djuplager
-    const ranges = [
-      { color: "#8aa0b0", lean: 22, amp: 1.15, steps: 20, seed: 41 },
-      { color: "#6f8798", lean: 14, amp: 0.85, steps: 14, seed: 73 },
-      { color: "#557084", lean: 8, amp: 0.55, steps: 10, seed: 19 },
-    ];
-    for (const range of ranges) {
-      ctx.fillStyle = range.color;
-      ctx.beginPath();
-      ctx.moveTo(-30, horizon);
-      for (let i = 0; i <= range.steps; i++) {
-        const t = i / range.steps;
-        const x = t * w - curveLean * range.lean;
-        const wave =
-          Math.sin(t * 9 + range.seed) * 0.45 +
-          Math.sin(t * 17 + range.seed * 0.3) * 0.3 +
-          ((i * range.seed) % 11) / 22;
-        const peak = horizon - (22 + wave * 70) * range.amp * (h / 520);
-        ctx.lineTo(x, peak);
-      }
-      ctx.lineTo(w + 40, horizon);
-      ctx.closePath();
-      ctx.fill();
+    ctx.fillStyle = "#b7c9d2";
+    ctx.beginPath();
+    ctx.moveTo(0, horizon);
+    for (let i = 0; i <= 16; i++) {
+      const x = (i / 16) * w - curveLean * 18;
+      const peak = horizon - (28 + ((i * 53) % 78)) * (h / 520);
+      ctx.lineTo(x, peak);
     }
-
-    // Låg dis vid horisonten
-    const haze = ctx.createLinearGradient(0, horizon - 40, 0, horizon + 10);
-    haze.addColorStop(0, "rgba(210,224,230,0)");
-    haze.addColorStop(1, "rgba(210,224,230,0.55)");
-    ctx.fillStyle = haze;
-    ctx.fillRect(0, horizon - 40, w, 50);
-  }
-
-  function carDims(kind, s) {
-    if (kind === "suv") return { w: 108 * s, h: 68 * s, top: -0.98 };
-    if (kind === "sport") return { w: 100 * s, h: 44 * s, top: -0.72 };
-    if (kind === "hatch") return { w: 88 * s, h: 52 * s, top: -0.88 };
-    return { w: 96 * s, h: 54 * s, top: -0.9 };
+    ctx.lineTo(w + 40, horizon);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#9eb4c0";
+    ctx.beginPath();
+    ctx.moveTo(0, horizon);
+    for (let i = 0; i <= 10; i++) {
+      const x = (i / 10) * w - curveLean * 10;
+      const peak = horizon - (16 + ((i * 37) % 40)) * (h / 640);
+      ctx.lineTo(x, Math.min(horizon - 4, peak + 18));
+    }
+    ctx.lineTo(w + 20, horizon);
+    ctx.closePath();
+    ctx.fill();
   }
 
   function drawCarSprite(x, y, scale, color, oncoming = false, kind = "sedan") {
-    const s = Math.max(0.18, scale);
-    const { w, h } = carDims(kind, s);
+    const s = Math.max(0.2, scale);
+    const w = (kind === "suv" ? 102 : kind === "sport" ? 96 : kind === "hatch" ? 86 : 92) * s;
+    const h = (kind === "suv" ? 62 : kind === "sport" ? 42 : kind === "hatch" ? 50 : 52) * s;
     ctx.save();
     ctx.translate(x, y);
-    // Mjuk skugga på asfalten
-    const sh = ctx.createRadialGradient(0, h * 0.48, 2, 0, h * 0.5, w * 0.58);
-    sh.addColorStop(0, "rgba(0,0,0,.5)");
-    sh.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = sh;
+    ctx.fillStyle = "rgba(0,0,0,.42)";
     ctx.beginPath();
-    ctx.ellipse(0, h * 0.5, w * 0.55, h * 0.14, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, h * 0.52, w * 0.52, h * 0.12, 0, 0, Math.PI * 2);
     ctx.fill();
     if (oncoming) drawCarFront(w, h, color, kind, s);
     else drawCarRear(w, h, color, kind, s);
     ctx.restore();
   }
 
-  function drawWheelPair(w, h, s, kind) {
-    const spread = kind === "sport" ? 0.36 : 0.34;
+  function drawWheelPair(w, h, s) {
     for (const side of [-1, 1]) {
-      const wx = side * w * spread;
-      const wy = h * 0.3;
-      // Däck
-      ctx.fillStyle = "#0c0c0e";
+      const wx = side * w * 0.34;
+      const wy = h * 0.28;
+      ctx.fillStyle = "#0a0a0a";
       ctx.beginPath();
-      ctx.ellipse(wx, wy, w * 0.11, h * 0.18, 0, 0, Math.PI * 2);
+      ctx.ellipse(wx, wy, w * 0.1, h * 0.16, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Sidovägg
-      ctx.strokeStyle = "#2a2a2e";
-      ctx.lineWidth = Math.max(1, s * 1.2);
+      ctx.fillStyle = "#8a9199";
       ctx.beginPath();
-      ctx.ellipse(wx, wy, w * 0.085, h * 0.14, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      // Fälg
-      const rim = ctx.createRadialGradient(wx - 2, wy - 2, 1, wx, wy, w * 0.055);
-      rim.addColorStop(0, "#d8dee6");
-      rim.addColorStop(0.45, "#8a929c");
-      rim.addColorStop(1, "#2a3038");
-      ctx.fillStyle = rim;
-      ctx.beginPath();
-      ctx.ellipse(wx, wy, w * 0.055, h * 0.085, 0, 0, Math.PI * 2);
+      ctx.ellipse(wx, wy, w * 0.045, h * 0.07, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Ekrar
-      ctx.strokeStyle = "rgba(255,255,255,.35)";
-      ctx.lineWidth = Math.max(0.8, s);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(wx, wy);
-        ctx.lineTo(wx + Math.cos(a) * w * 0.04, wy + Math.sin(a) * h * 0.06);
-        ctx.stroke();
-      }
-      ctx.fillStyle = "#12151a";
+      ctx.fillStyle = "#1a1d22";
       ctx.beginPath();
-      ctx.ellipse(wx, wy, w * 0.016, h * 0.025, 0, 0, Math.PI * 2);
+      ctx.ellipse(wx, wy, w * 0.018, h * 0.03, 0, 0, Math.PI * 2);
       ctx.fill();
-    }
-  }
-
-  function drawCarBodyPath(w, h, top, kind, front) {
-    ctx.beginPath();
-    if (front) {
-      ctx.moveTo(-w * 0.44, h * 0.22);
-      ctx.quadraticCurveTo(-w * 0.52, h * 0.04, -w * 0.48, -h * 0.06);
-      ctx.lineTo(-w * 0.4, top * 0.42);
-      if (kind === "sport") {
-        ctx.quadraticCurveTo(-w * 0.22, top * 0.85, -w * 0.08, top);
-        ctx.lineTo(w * 0.08, top);
-        ctx.quadraticCurveTo(w * 0.22, top * 0.85, w * 0.4, top * 0.42);
-      } else if (kind === "suv") {
-        ctx.lineTo(-w * 0.32, top);
-        ctx.lineTo(w * 0.32, top);
-        ctx.lineTo(w * 0.4, top * 0.42);
-      } else {
-        ctx.quadraticCurveTo(-w * 0.22, top, 0, top);
-        ctx.quadraticCurveTo(w * 0.22, top, w * 0.4, top * 0.42);
-      }
-      ctx.lineTo(w * 0.48, -h * 0.06);
-      ctx.quadraticCurveTo(w * 0.52, h * 0.04, w * 0.44, h * 0.22);
-      ctx.closePath();
-    } else {
-      ctx.moveTo(-w * 0.45, h * 0.24);
-      ctx.quadraticCurveTo(-w * 0.53, h * 0.05, -w * 0.49, -h * 0.1);
-      ctx.lineTo(-w * 0.42, top * 0.5);
-      if (kind === "sport") {
-        ctx.quadraticCurveTo(-w * 0.3, top * 0.95, -w * 0.14, top);
-        ctx.lineTo(w * 0.14, top);
-        ctx.quadraticCurveTo(w * 0.3, top * 0.95, w * 0.42, top * 0.5);
-      } else if (kind === "suv") {
-        ctx.lineTo(-w * 0.34, top);
-        ctx.lineTo(w * 0.34, top);
-        ctx.lineTo(w * 0.42, top * 0.5);
-      } else if (kind === "hatch") {
-        ctx.quadraticCurveTo(-w * 0.28, top, -w * 0.1, top);
-        ctx.lineTo(w * 0.1, top);
-        ctx.quadraticCurveTo(w * 0.28, top, w * 0.42, top * 0.5);
-      } else {
-        ctx.quadraticCurveTo(-w * 0.3, top, -w * 0.12, top);
-        ctx.lineTo(w * 0.12, top);
-        ctx.quadraticCurveTo(w * 0.3, top, w * 0.42, top * 0.5);
-      }
-      ctx.lineTo(w * 0.49, -h * 0.1);
-      ctx.quadraticCurveTo(w * 0.53, h * 0.05, w * 0.45, h * 0.24);
-      ctx.closePath();
     }
   }
 
   function drawCarRear(w, h, color, kind, s) {
-    const top = (kind === "suv" ? -0.98 : kind === "sport" ? -0.7 : kind === "hatch" ? -0.86 : -0.9) * h;
-    drawWheelPair(w, h, s, kind);
+    const top = kind === "suv" ? -h * 0.98 : kind === "sport" ? -h * 0.7 : -h * 0.86;
+    drawWheelPair(w, h, s);
 
     // Stötfångare under
-    ctx.fillStyle = shadeColor(color, -40);
+    ctx.fillStyle = "#1a1a1a";
     ctx.beginPath();
-    ctx.moveTo(-w * 0.42, h * 0.18);
-    ctx.quadraticCurveTo(0, h * 0.28, w * 0.42, h * 0.18);
-    ctx.lineTo(w * 0.4, h * 0.08);
-    ctx.quadraticCurveTo(0, h * 0.16, -w * 0.4, h * 0.08);
-    ctx.closePath();
+    ctx.ellipse(0, h * 0.28, w * 0.42, h * 0.08, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const body = ctx.createLinearGradient(-w * 0.55, top, w * 0.55, h * 0.25);
-    body.addColorStop(0, shadeColor(color, 70));
-    body.addColorStop(0.22, shadeColor(color, 28));
-    body.addColorStop(0.5, color);
-    body.addColorStop(0.78, shadeColor(color, -25));
-    body.addColorStop(1, shadeColor(color, -55));
+    const body = ctx.createLinearGradient(-w * 0.5, top, w * 0.5, h * 0.3);
+    body.addColorStop(0, shadeColor(color, 55));
+    body.addColorStop(0.35, shadeColor(color, 18));
+    body.addColorStop(0.55, color);
+    body.addColorStop(1, shadeColor(color, -50));
     ctx.fillStyle = body;
-    drawCarBodyPath(w, h, top, kind, false);
-    ctx.fill();
-
-    // Lackglans
-    const shine = ctx.createLinearGradient(0, top, 0, h * 0.05);
-    shine.addColorStop(0, "rgba(255,255,255,.4)");
-    shine.addColorStop(0.35, "rgba(255,255,255,.12)");
-    shine.addColorStop(0.7, "rgba(255,255,255,0)");
-    ctx.fillStyle = shine;
     ctx.beginPath();
-    ctx.moveTo(-w * 0.28, top + h * 0.06);
-    ctx.lineTo(w * 0.28, top + h * 0.06);
-    ctx.lineTo(w * 0.36, -h * 0.02);
-    ctx.lineTo(-w * 0.36, -h * 0.02);
+    ctx.moveTo(-w * 0.46, h * 0.22);
+    ctx.quadraticCurveTo(-w * 0.52, h * 0.02, -w * 0.48, -h * 0.12);
+    ctx.lineTo(-w * 0.4, top * 0.55);
+    ctx.quadraticCurveTo(-w * 0.28, top, -w * 0.12, top);
+    ctx.lineTo(w * 0.12, top);
+    ctx.quadraticCurveTo(w * 0.28, top, w * 0.4, top * 0.55);
+    ctx.lineTo(w * 0.48, -h * 0.12);
+    ctx.quadraticCurveTo(w * 0.52, h * 0.02, w * 0.46, h * 0.22);
     ctx.closePath();
     ctx.fill();
 
-    // Panel-linjer
+    // Dörrlinjer
     ctx.strokeStyle = "rgba(0,0,0,.22)";
-    ctx.lineWidth = Math.max(1, s * 0.8);
+    ctx.lineWidth = Math.max(1, s * 1.2);
     ctx.beginPath();
-    ctx.moveTo(-w * 0.18, -h * 0.08);
-    ctx.lineTo(-w * 0.18, h * 0.12);
-    ctx.moveTo(w * 0.18, -h * 0.08);
-    ctx.lineTo(w * 0.18, h * 0.12);
+    ctx.moveTo(-w * 0.12, top + h * 0.15);
+    ctx.lineTo(-w * 0.14, h * 0.18);
+    ctx.moveTo(w * 0.12, top + h * 0.15);
+    ctx.lineTo(w * 0.14, h * 0.18);
     ctx.stroke();
 
-    // Bakruta + svart karm
-    ctx.fillStyle = "#0a1018";
+    // Sidoglans
+    const shine = ctx.createLinearGradient(0, top, 0, h * 0.1);
+    shine.addColorStop(0, "rgba(255,255,255,.32)");
+    shine.addColorStop(0.45, "rgba(255,255,255,.06)");
+    shine.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shine;
     ctx.beginPath();
-    ctx.moveTo(-w * 0.28, top + h * 0.06);
-    ctx.quadraticCurveTo(0, top - h * 0.01, w * 0.28, top + h * 0.06);
-    ctx.lineTo(w * 0.34, -h * 0.02);
-    ctx.quadraticCurveTo(0, -h * 0.1, -w * 0.34, -h * 0.02);
+    ctx.moveTo(-w * 0.3, top + h * 0.04);
+    ctx.lineTo(w * 0.3, top + h * 0.04);
+    ctx.lineTo(w * 0.38, -h * 0.05);
+    ctx.lineTo(-w * 0.38, -h * 0.05);
     ctx.closePath();
     ctx.fill();
-    const glass = ctx.createLinearGradient(0, top, 0, -h * 0.02);
-    glass.addColorStop(0, "rgba(200,230,250,.85)");
-    glass.addColorStop(0.4, "rgba(60,110,150,.9)");
-    glass.addColorStop(1, "rgba(12,28,42,.95)");
+
+    // Bakruta + ramtätning
+    ctx.fillStyle = "#0a1014";
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.26, top + h * 0.08);
+    ctx.quadraticCurveTo(0, top, w * 0.26, top + h * 0.08);
+    ctx.lineTo(w * 0.32, -h * 0.04);
+    ctx.quadraticCurveTo(0, -h * 0.1, -w * 0.32, -h * 0.04);
+    ctx.closePath();
+    ctx.fill();
+    const glass = ctx.createLinearGradient(0, top, 0, -h * 0.05);
+    glass.addColorStop(0, "#d0ecf8");
+    glass.addColorStop(0.35, "#4a7a9a");
+    glass.addColorStop(1, "#152838");
     ctx.fillStyle = glass;
     ctx.beginPath();
     ctx.moveTo(-w * 0.24, top + h * 0.1);
     ctx.quadraticCurveTo(0, top + h * 0.02, w * 0.24, top + h * 0.1);
-    ctx.lineTo(w * 0.3, -h * 0.04);
-    ctx.quadraticCurveTo(0, -h * 0.1, -w * 0.3, -h * 0.04);
+    ctx.lineTo(w * 0.3, -h * 0.06);
+    ctx.quadraticCurveTo(0, -h * 0.12, -w * 0.3, -h * 0.06);
     ctx.closePath();
     ctx.fill();
-    // Fönsterreflektion
-    ctx.fillStyle = "rgba(255,255,255,.35)";
+    ctx.fillStyle = "rgba(255,255,255,.42)";
     ctx.beginPath();
-    ctx.ellipse(-w * 0.08, top + h * 0.14, w * 0.09, h * 0.035, -0.35, 0, Math.PI * 2);
+    ctx.ellipse(-w * 0.08, top + h * 0.12, w * 0.08, h * 0.04, -0.3, 0, Math.PI * 2);
     ctx.fill();
 
     // Speglar
-    for (const side of [-1, 1]) {
-      const mx = side * w * 0.48 - (side > 0 ? 0 : w * 0.08);
-      ctx.fillStyle = shadeColor(color, -18);
-      ctx.fillRect(mx, -h * 0.2, w * 0.08, h * 0.1);
-      ctx.fillStyle = "#a8d4ec";
-      ctx.fillRect(side * w * 0.47 - (side > 0 ? 0 : w * 0.05), -h * 0.18, w * 0.05, h * 0.06);
-    }
+    ctx.fillStyle = shadeColor(color, -20);
+    ctx.fillRect(-w * 0.52, -h * 0.18, w * 0.07, h * 0.08);
+    ctx.fillRect(w * 0.45, -h * 0.18, w * 0.07, h * 0.08);
+    ctx.fillStyle = "#8ec8e0";
+    ctx.fillRect(-w * 0.51, -h * 0.16, w * 0.04, h * 0.05);
+    ctx.fillRect(w * 0.47, -h * 0.16, w * 0.04, h * 0.05);
 
-    // Bakljus
+    // Bakljus — LED-band
     for (const side of [-1, 1]) {
       const lx = side * w * 0.36;
-      ctx.fillStyle = "#ff1414";
-      ctx.shadowColor = "rgba(255,20,20,.9)";
-      ctx.shadowBlur = 16 * s;
+      ctx.fillStyle = "#ff1010";
+      ctx.shadowColor = "rgba(255,30,30,.9)";
+      ctx.shadowBlur = 10 * s;
       ctx.beginPath();
-      ctx.ellipse(lx, -h * 0.01, w * 0.11, h * 0.065, side * 0.1, 0, Math.PI * 2);
+      ctx.ellipse(lx, -h * 0.02, w * 0.1, h * 0.05, side * 0.1, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "#ffd0d0";
+      ctx.fillStyle = "#ffc8c8";
       ctx.beginPath();
-      ctx.ellipse(lx - side * w * 0.025, -h * 0.025, w * 0.04, h * 0.028, 0, 0, Math.PI * 2);
+      ctx.ellipse(lx - side * w * 0.025, -h * 0.03, w * 0.045, h * 0.022, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Blinkers
+      // Blinkers amber
       ctx.fillStyle = "#ffb020";
       ctx.beginPath();
-      ctx.ellipse(lx + side * w * 0.07, h * 0.02, w * 0.035, h * 0.025, 0, 0, Math.PI * 2);
+      ctx.ellipse(lx - side * w * 0.09, h * 0.02, w * 0.035, h * 0.025, 0, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Mittbromsljus
-    ctx.fillStyle = "#ff3030";
-    ctx.fillRect(-w * 0.12, top + h * 0.04, w * 0.24, h * 0.028);
 
     // Avgas
     ctx.fillStyle = "#1a1a1a";
     ctx.strokeStyle = "#5a5a5a";
-    ctx.lineWidth = Math.max(1, s);
-    for (const side of [-1, 1]) {
+    ctx.lineWidth = 1;
+    for (const sx of [-0.2, 0.2]) {
       ctx.beginPath();
-      ctx.ellipse(side * w * 0.2, h * 0.22, w * 0.04, h * 0.032, 0, 0, Math.PI * 2);
+      ctx.ellipse(w * sx, h * 0.22, w * 0.04, h * 0.032, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
 
-    // Skylt
-    if (s > 0.45) {
-      ctx.fillStyle = "#f4f1e8";
-      ctx.fillRect(-w * 0.16, h * 0.04, w * 0.32, h * 0.09);
+    if (s > 0.55) {
+      ctx.fillStyle = "#f2efe6";
+      ctx.fillRect(-w * 0.16, h * 0.01, w * 0.32, h * 0.09);
       ctx.strokeStyle = "#1a3a6e";
       ctx.lineWidth = Math.max(1, s);
-      ctx.strokeRect(-w * 0.16, h * 0.04, w * 0.32, h * 0.09);
+      ctx.strokeRect(-w * 0.16, h * 0.01, w * 0.32, h * 0.09);
       ctx.fillStyle = "#1a3a6e";
-      ctx.font = `bold ${Math.max(6, 8.5 * s)}px "IBM Plex Sans", sans-serif`;
+      ctx.font = `bold ${Math.max(6, 8.5 * s)}px sans-serif`;
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("NER 42A", 0, h * 0.085);
+      ctx.fillText("ABC 12A", 0, h * 0.08);
     }
 
     if (kind === "sport") {
       ctx.fillStyle = shadeColor(color, -40);
       ctx.fillRect(-w * 0.3, top - h * 0.08, w * 0.6, h * 0.055);
-      ctx.fillRect(-w * 0.28, top - h * 0.03, w * 0.05, h * 0.09);
-      ctx.fillRect(w * 0.23, top - h * 0.03, w * 0.05, h * 0.09);
+      ctx.fillRect(-w * 0.28, top - h * 0.03, w * 0.045, h * 0.09);
+      ctx.fillRect(w * 0.235, top - h * 0.03, w * 0.045, h * 0.09);
     }
-    if (kind === "suv") {
+    if (kind === "suv" && s > 0.4) {
       ctx.strokeStyle = shadeColor(color, -30);
-      ctx.lineWidth = Math.max(1.5, s * 1.5);
+      ctx.lineWidth = 2 * s;
       ctx.beginPath();
-      ctx.moveTo(-w * 0.3, top + h * 0.02);
-      ctx.lineTo(-w * 0.3, top - h * 0.06);
-      ctx.lineTo(w * 0.3, top - h * 0.06);
-      ctx.lineTo(w * 0.3, top + h * 0.02);
+      ctx.moveTo(-w * 0.22, top + h * 0.02);
+      ctx.lineTo(-w * 0.18, top - h * 0.06);
+      ctx.lineTo(w * 0.18, top - h * 0.06);
+      ctx.lineTo(w * 0.22, top + h * 0.02);
       ctx.stroke();
     }
   }
 
   function drawCarFront(w, h, color, kind, s) {
-    const top = (kind === "suv" ? -0.98 : kind === "sport" ? -0.68 : kind === "hatch" ? -0.86 : -0.88) * h;
-    drawWheelPair(w, h, s, kind);
+    const top = kind === "suv" ? -h * 0.98 : kind === "sport" ? -h * 0.68 : -h * 0.84;
+    drawWheelPair(w, h, s);
 
-    // Undre stötfångare
-    ctx.fillStyle = shadeColor(color, -45);
+    ctx.fillStyle = "#1a1a1a";
     ctx.beginPath();
-    ctx.moveTo(-w * 0.4, h * 0.16);
-    ctx.quadraticCurveTo(0, h * 0.26, w * 0.4, h * 0.16);
-    ctx.lineTo(w * 0.38, h * 0.06);
-    ctx.quadraticCurveTo(0, h * 0.14, -w * 0.38, h * 0.06);
-    ctx.closePath();
+    ctx.ellipse(0, h * 0.26, w * 0.4, h * 0.07, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const body = ctx.createLinearGradient(-w * 0.55, top, w * 0.55, h * 0.25);
-    body.addColorStop(0, shadeColor(color, 75));
-    body.addColorStop(0.25, shadeColor(color, 30));
-    body.addColorStop(0.5, color);
-    body.addColorStop(0.8, shadeColor(color, -30));
-    body.addColorStop(1, shadeColor(color, -50));
+    const body = ctx.createLinearGradient(-w * 0.5, top, w * 0.5, h * 0.3);
+    body.addColorStop(0, shadeColor(color, 60));
+    body.addColorStop(0.4, shadeColor(color, 15));
+    body.addColorStop(0.6, color);
+    body.addColorStop(1, shadeColor(color, -45));
     ctx.fillStyle = body;
-    drawCarBodyPath(w, h, top, kind, true);
-    ctx.fill();
-
-    const shine = ctx.createLinearGradient(0, top, 0, 0);
-    shine.addColorStop(0, "rgba(255,255,255,.42)");
-    shine.addColorStop(0.5, "rgba(255,255,255,.08)");
-    shine.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = shine;
     ctx.beginPath();
-    ctx.moveTo(-w * 0.26, top + h * 0.08);
-    ctx.lineTo(w * 0.26, top + h * 0.08);
-    ctx.lineTo(w * 0.34, -h * 0.02);
-    ctx.lineTo(-w * 0.34, -h * 0.02);
+    ctx.moveTo(-w * 0.46, h * 0.2);
+    ctx.quadraticCurveTo(-w * 0.52, 0, -w * 0.46, -h * 0.08);
+    ctx.lineTo(-w * 0.34, top * 0.5);
+    ctx.quadraticCurveTo(-w * 0.2, top, 0, top);
+    ctx.quadraticCurveTo(w * 0.2, top, w * 0.34, top * 0.5);
+    ctx.lineTo(w * 0.46, -h * 0.08);
+    ctx.quadraticCurveTo(w * 0.52, 0, w * 0.46, h * 0.2);
     ctx.closePath();
     ctx.fill();
+
+    // Huva-linjer
+    ctx.strokeStyle = "rgba(0,0,0,.2)";
+    ctx.lineWidth = Math.max(1, s);
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.12, top + h * 0.2);
+    ctx.lineTo(-w * 0.08, h * 0.05);
+    ctx.moveTo(w * 0.12, top + h * 0.2);
+    ctx.lineTo(w * 0.08, h * 0.05);
+    ctx.stroke();
 
     // Vindruta
     ctx.fillStyle = "#0a1218";
     ctx.beginPath();
-    ctx.moveTo(-w * 0.26, top + h * 0.08);
-    ctx.quadraticCurveTo(0, top, w * 0.26, top + h * 0.08);
-    ctx.lineTo(w * 0.32, -h * 0.0);
-    ctx.quadraticCurveTo(0, -h * 0.08, -w * 0.32, -h * 0.0);
+    ctx.moveTo(-w * 0.24, top + h * 0.1);
+    ctx.quadraticCurveTo(0, top + h * 0.02, w * 0.24, top + h * 0.1);
+    ctx.lineTo(w * 0.3, 0);
+    ctx.quadraticCurveTo(0, -h * 0.06, -w * 0.3, 0);
     ctx.closePath();
     ctx.fill();
-    const glass = ctx.createLinearGradient(0, top, 0, 0);
-    glass.addColorStop(0, "rgba(230,248,255,.9)");
-    glass.addColorStop(0.35, "rgba(90,160,200,.85)");
-    glass.addColorStop(1, "rgba(20,50,70,.95)");
+    const glass = ctx.createLinearGradient(0, top, 0, -h * 0.02);
+    glass.addColorStop(0, "#e8f6ff");
+    glass.addColorStop(0.4, "#6aa8c8");
+    glass.addColorStop(1, "#1a3850");
     ctx.fillStyle = glass;
     ctx.beginPath();
     ctx.moveTo(-w * 0.22, top + h * 0.12);
     ctx.quadraticCurveTo(0, top + h * 0.04, w * 0.22, top + h * 0.12);
-    ctx.lineTo(w * 0.28, -h * 0.01);
-    ctx.quadraticCurveTo(0, -h * 0.07, -w * 0.28, -h * 0.01);
+    ctx.lineTo(w * 0.28, -h * 0.02);
+    ctx.quadraticCurveTo(0, -h * 0.08, -w * 0.28, -h * 0.02);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.4)";
+    ctx.fillStyle = "rgba(255,255,255,.45)";
     ctx.beginPath();
-    ctx.ellipse(w * 0.05, top + h * 0.12, w * 0.1, h * 0.03, 0.3, 0, Math.PI * 2);
+    ctx.ellipse(w * 0.06, top + h * 0.1, w * 0.1, h * 0.035, 0.25, 0, Math.PI * 2);
     ctx.fill();
 
-    // Grill
-    ctx.fillStyle = "#0a0a0c";
-    ctx.beginPath();
-    ctx.moveTo(-w * 0.22, h * 0.02);
-    ctx.quadraticCurveTo(0, h * 0.12, w * 0.22, h * 0.02);
-    ctx.lineTo(w * 0.2, -h * 0.04);
-    ctx.quadraticCurveTo(0, h * 0.02, -w * 0.2, -h * 0.04);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = "#4a5058";
-    ctx.lineWidth = Math.max(0.8, s);
-    for (let i = 0; i < 5; i++) {
-      const x = -w * 0.16 + i * w * 0.08;
+    // Torkarblad
+    if (s > 0.5) {
+      ctx.strokeStyle = "#1a1a1a";
+      ctx.lineWidth = Math.max(1, 1.5 * s);
       ctx.beginPath();
-      ctx.moveTo(x, -h * 0.02);
-      ctx.lineTo(x, h * 0.06);
+      ctx.moveTo(-w * 0.08, -h * 0.01);
+      ctx.quadraticCurveTo(-w * 0.02, top + h * 0.18, w * 0.1, top + h * 0.14);
+      ctx.moveTo(w * 0.02, 0);
+      ctx.quadraticCurveTo(w * 0.08, top + h * 0.16, w * 0.18, top + h * 0.12);
       ctx.stroke();
     }
-    // Emblem
-    ctx.fillStyle = "#d0d6de";
-    ctx.beginPath();
-    ctx.arc(0, h * 0.01, w * 0.03, 0, Math.PI * 2);
-    ctx.fill();
 
-    // Strålkastare
+    // Grill
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(-w * 0.22, 0, w * 0.44, h * 0.12);
+    ctx.fillStyle = "#3a3a3a";
+    for (let i = 0; i < 7; i++) {
+      ctx.fillRect(-w * 0.18 + i * w * 0.05, h * 0.015, w * 0.018, h * 0.09);
+    }
+    ctx.strokeStyle = shadeColor(color, 30);
+    ctx.lineWidth = 1.5 * s;
+    ctx.strokeRect(-w * 0.22, 0, w * 0.44, h * 0.12);
+
+    // Strålkastare + LED DRL
     for (const side of [-1, 1]) {
       const lx = side * w * 0.34;
-      ctx.fillStyle = "#fff6d8";
-      ctx.shadowColor = "rgba(255,236,180,.95)";
+      ctx.fillStyle = "#fff8e0";
+      ctx.shadowColor = "rgba(255,240,180,.95)";
       ctx.shadowBlur = 14 * s;
       ctx.beginPath();
-      ctx.ellipse(lx, -h * 0.02, w * 0.11, h * 0.075, side * 0.18, 0, Math.PI * 2);
+      ctx.ellipse(lx, -h * 0.01, w * 0.11, h * 0.065, side * 0.18, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
-      const lens = ctx.createRadialGradient(lx - side * 3, -h * 0.04, 1, lx, -h * 0.02, w * 0.08);
-      lens.addColorStop(0, "#ffffff");
-      lens.addColorStop(0.4, "#ffe8a0");
-      lens.addColorStop(1, "#c8b070");
-      ctx.fillStyle = lens;
+      ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.ellipse(lx, -h * 0.02, w * 0.07, h * 0.05, side * 0.1, 0, Math.PI * 2);
+      ctx.ellipse(lx - side * w * 0.02, -h * 0.02, w * 0.045, h * 0.028, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Dimljus
-      ctx.fillStyle = "#ffe0a0";
+      ctx.strokeStyle = "rgba(200,230,255,.7)";
+      ctx.lineWidth = 1.5 * s;
       ctx.beginPath();
-      ctx.ellipse(lx, h * 0.1, w * 0.04, h * 0.028, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(lx - side * w * 0.08, h * 0.04);
+      ctx.quadraticCurveTo(lx, h * 0.06, lx + side * w * 0.02, h * 0.03);
+      ctx.stroke();
     }
 
     // Speglar
-    for (const side of [-1, 1]) {
-      ctx.fillStyle = shadeColor(color, -12);
-      ctx.fillRect(side * w * 0.46 - (side > 0 ? 0 : w * 0.08), -h * 0.22, w * 0.08, h * 0.1);
-      ctx.fillStyle = "#9ecce8";
-      ctx.fillRect(side * w * 0.45 - (side > 0 ? 0 : w * 0.05), -h * 0.2, w * 0.05, h * 0.06);
-    }
-
-    // Framskylt (nära)
-    if (s > 0.55) {
-      ctx.fillStyle = "#f4f1e8";
-      ctx.fillRect(-w * 0.12, h * 0.08, w * 0.24, h * 0.07);
-      ctx.strokeStyle = "#1a3a6e";
-      ctx.lineWidth = Math.max(1, s);
-      ctx.strokeRect(-w * 0.12, h * 0.08, w * 0.24, h * 0.07);
-    }
+    ctx.fillStyle = shadeColor(color, -15);
+    ctx.fillRect(-w * 0.5, -h * 0.2, w * 0.07, h * 0.09);
+    ctx.fillRect(w * 0.43, -h * 0.2, w * 0.07, h * 0.09);
+    ctx.fillStyle = "#a8d8f0";
+    ctx.fillRect(-w * 0.49, -h * 0.18, w * 0.04, h * 0.05);
+    ctx.fillRect(w * 0.45, -h * 0.18, w * 0.04, h * 0.05);
   }
 
   function fogPaint(hex, fog) {
@@ -1557,39 +867,6 @@
     polygon(x1 - w1, p1.y, x1 + w1, p1.y, x2 + w2, p2.y, x2 - w2, p2.y, color);
   }
 
-  function drawTree(px, py, s, variant) {
-    const trunkH = (12 + (variant % 3) * 3) * s;
-    ctx.fillStyle = "#4a3424";
-    ctx.fillRect(px - 1.4 * s, py - trunkH, 2.8 * s, trunkH);
-    const greens = ["#1e4a28", "#2a5c32", "#245830", "#326a38"];
-    const g = greens[variant % greens.length];
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    if (variant % 3 === 0) {
-      // Gran
-      ctx.moveTo(px, py - trunkH - 28 * s);
-      ctx.lineTo(px + 14 * s, py - trunkH + 2 * s);
-      ctx.lineTo(px - 14 * s, py - trunkH + 2 * s);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(px, py - trunkH - 20 * s);
-      ctx.lineTo(px + 18 * s, py - trunkH + 10 * s);
-      ctx.lineTo(px - 18 * s, py - trunkH + 10 * s);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      ctx.ellipse(px, py - trunkH - 10 * s, 13 * s, 11 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(px - 8 * s, py - trunkH - 4 * s, 9 * s, 8 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(px + 8 * s, py - trunkH - 5 * s, 9 * s, 7.5 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.12)";
-      ctx.beginPath();
-      ctx.ellipse(px - 4 * s, py - trunkH - 14 * s, 4 * s, 3 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
   function drawRoad(w, h) {
     const base = Math.floor(state.pos / SEG_LEN) % segments.length;
     const baseY = segments[base].y || 0;
@@ -1598,17 +875,13 @@
     let x = 0;
     let dx = 0;
     const lean = state.curve * 0.8 + state.steer * 0.0011;
-    const roll = Math.max(-0.09, Math.min(0.09, state.steer * 0.00015));
-    const speedKmh = Math.abs(state.speed) * 3.6;
-    const vib = speedKmh > 8 ? Math.sin(performance.now() / 42) * Math.min(2.8, speedKmh * 0.018) : 0;
-    const shake = (state.bump > 0 ? (Math.random() - 0.5) * 20 * state.bump : 0) + vib;
-    const pitchMul = state.driveMode === "sport" ? 1.65 : 0.42;
-    const pitch =
-      ((state.input.up ? -16 : 0) + (state.input.down ? 12 : 0)) * pitchMul +
-      Math.sin(performance.now() / 180) * Math.min(3, speedKmh * 0.02);
+    const roll = Math.max(-0.07, Math.min(0.07, state.steer * 0.00013));
+    const shake = state.bump > 0 ? (Math.random() - 0.5) * 18 * state.bump : 0;
+    const pitchMul = state.driveMode === "sport" ? 1.5 : 0.35;
+    const pitch = ((state.input.up ? -14 : 0) + (state.input.down ? 10 : 0)) * pitchMul;
 
     ctx.save();
-    ctx.translate(w / 2 + shake, h * 0.58 + shake * 0.45);
+    ctx.translate(w / 2 + shake, h * 0.58 + shake * 0.4);
     ctx.rotate(roll);
     ctx.translate(-w / 2, -h * 0.58 + pitch);
 
@@ -1628,128 +901,74 @@
       const p2 = project(-x, seg.y, z2, playerWorldX, camY, 0, w, h);
       if (!p1 || !p2) continue;
       const fog = n / DRAW_DIST;
-      const worldIdx = base + n;
-      pts.push({ p1, p2, n, alt: (worldIdx % 2) === 0, fog, worldIdx, curve: seg.curve });
+      pts.push({ p1, p2, n, alt: ((base + n) % 2) === 0, fog });
       byN[n] = p2;
     }
 
+    // Nära först, så backar mot horisonten. Backkrön döljer vägen bakom.
     let clipY = h + 4;
     for (let i = 0; i < pts.length; i++) {
-      const { p1, p2, alt, n, fog, worldIdx, curve } = pts[i];
+      const { p1, p2, alt, n, fog } = pts[i];
       if (p1.y >= clipY) continue;
       if (p2.y >= p1.y) continue;
 
-      const grassA = fogPaint(alt ? "#4a6e3c" : "#3f6236", fog);
-      const grassB = fogPaint(alt ? "#557848" : "#4a6c40", fog);
+      const grass = fogPaint(alt ? "#4e7344" : "#45683c", fog);
       const shoulder = fogPaint(alt ? "#7a7264" : "#6a6356", fog);
-      const road = fogPaint(alt ? "#404850" : "#353c44", fog);
-      const paint = fogPaint("#f5f2e8", fog);
-      const curbLite = fogPaint(alt ? "#e8e4dc" : "#c62828", fog);
-      const curbDark = fogPaint(alt ? "#c62828" : "#e8e4dc", fog);
+      const road = fogPaint(alt ? "#3c444c" : "#353c44", fog);
+      const paint = fogPaint("#f3f0e6", fog);
 
-      // Gräs med subtila ränder
-      polygon(0, p1.y, w, p1.y, w, p2.y, 0, p2.y, grassA);
-      if ((worldIdx % 4) === 0) {
-        segmentBand(p1, p2, 2.4, -1.8, grassB);
-        segmentBand(p1, p2, 2.4, 1.8, grassB);
-      }
-
-      segmentBand(p1, p2, 1.18, 0, shoulder);
+      polygon(0, p1.y, w, p1.y, w, p2.y, 0, p2.y, grass);
+      segmentBand(p1, p2, 1.16, 0, shoulder);
       segmentBand(p1, p2, 1, 0, road);
-
-      // Kantlinjer
-      segmentBand(p1, p2, 0.016, -0.97, paint);
-      segmentBand(p1, p2, 0.016, 0.97, paint);
-
-      // Röd/vit kantsten
-      segmentBand(p1, p2, 0.022, -1.12, curbLite);
-      segmentBand(p1, p2, 0.022, 1.12, curbDark);
-
-      // Streckad mittlinje som rullar med positionen
-      const dashOn = ((worldIdx + Math.floor(state.pos / (SEG_LEN * 0.5))) % 4) < 2;
-      if (dashOn) segmentBand(p1, p2, 0.014, 0, paint);
-
-      // Körfältslinjer (svagare)
-      if ((worldIdx % 6) < 3) {
-        const lane = fogPaint("#c8c4b8", fog);
-        segmentBand(p1, p2, 0.006, -0.33, lane);
-        segmentBand(p1, p2, 0.006, 0.33, lane);
-      }
+      segmentBand(p1, p2, 0.014, -0.97, paint);
+      segmentBand(p1, p2, 0.014, 0.97, paint);
+      if (alt) segmentBand(p1, p2, 0.012, 0, paint);
 
       const s = Math.max(0.35, p2.w / 240);
-
-      // Vägräcken i kurvor
-      if (Math.abs(curve) > 0.9 && fog < 0.82 && n % 2 === 0) {
-        const side = curve > 0 ? -1 : 1;
-        const px = p2.x + side * p2.w * 1.2;
-        ctx.fillStyle = fogPaint("#9aa3ad", fog);
-        ctx.fillRect(px - 1.2 * s, p2.y - 14 * s, 2.4 * s, 14 * s);
-        ctx.fillStyle = fogPaint("#c5ccd4", fog);
-        ctx.fillRect(px - 5 * s, p2.y - 16 * s, 10 * s, 2.2 * s);
-      }
-
-      // Lampstolpar
-      if (n % 6 === 0 && fog < 0.88) {
+      if (n % 5 === 0 && fog < 0.85) {
         for (const side of [-1, 1]) {
-          const px = p2.x + side * p2.w * 1.22;
-          const poleH = 40 * s;
-          ctx.fillStyle = fogPaint("#c8d0d8", fog);
-          ctx.fillRect(px - Math.max(1, s * 0.75), p2.y - poleH, Math.max(2, s * 1.4), poleH);
-          ctx.fillStyle = fogPaint("#e8ecf0", fog);
-          ctx.fillRect(px - side * 8 * s, p2.y - poleH - 2 * s, side * 10 * s, 2.2 * s);
-          ctx.fillStyle = state.engineOn ? "rgba(255,240,180,0.35)" : fogPaint("#f1c40f", fog);
+          const px = p2.x + side * p2.w * 1.16;
+          const poleH = 34 * s;
+          ctx.fillStyle = "#dfe5ec";
+          ctx.fillRect(px - Math.max(1, s * 0.7), p2.y - poleH, Math.max(2, s * 1.3), poleH);
+          ctx.fillStyle = "#f1c40f";
+          ctx.fillRect(px - 3.2 * s, p2.y - poleH - 2 * s, 6.4 * s, 3 * s);
+        }
+      }
+      if (n % 7 === 0 && fog < 0.8) {
+        for (const side of [-1, 1]) {
+          const px = p2.x + side * p2.w * (1.55 + (n % 3) * 0.08);
+          ctx.fillStyle = "#5c4632";
+          ctx.fillRect(px - 1.1 * s, p2.y - 10 * s, 2.2 * s, 10 * s);
+          ctx.fillStyle = n % 14 === 0 ? "#2f6a3c" : "#245832";
           ctx.beginPath();
-          ctx.ellipse(px - side * 8 * s, p2.y - poleH - 1 * s, 4 * s, 3 * s, 0, 0, Math.PI * 2);
+          ctx.ellipse(px, p2.y - 16 * s, 11 * s, 8 * s, 0, 0, Math.PI * 2);
+          ctx.ellipse(px - 6 * s, p2.y - 12 * s, 8 * s, 7 * s, 0, 0, Math.PI * 2);
+          ctx.ellipse(px + 6 * s, p2.y - 13 * s, 8 * s, 6.5 * s, 0, 0, Math.PI * 2);
           ctx.fill();
         }
       }
-
-      // Träd
-      if (n % 5 === 0 && fog < 0.84) {
-        for (const side of [-1, 1]) {
-          const dist = 1.5 + ((n + side + 3) % 4) * 0.12;
-          const px = p2.x + side * p2.w * dist;
-          drawTree(px, p2.y, s * (0.85 + (n % 3) * 0.12), n + side + worldIdx);
-        }
-      }
-
-      // Hus
-      if (n % 11 === 0 && fog < 0.72) {
-        const side = (worldIdx % 22) < 11 ? -1 : 1;
-        const px = p2.x + side * p2.w * (2.0 + (n % 3) * 0.1);
-        const bw = 28 * s;
-        const bh = (16 + (n % 4) * 4) * s;
-        ctx.fillStyle = "rgba(0,0,0,0.2)";
-        ctx.fillRect(px - bw * 0.45, p2.y - 2 * s, bw, 4 * s);
-        ctx.fillStyle = fogPaint(side < 0 ? "#d4cec0" : "#e2d4c4", fog);
+      if (n % 13 === 0 && fog < 0.7) {
+        const side = n % 26 === 0 ? -1 : 1;
+        const px = p2.x + side * p2.w * 2.05;
+        const bw = 26 * s;
+        const bh = 18 * s;
+        ctx.fillStyle = "rgba(0,0,0,0.18)";
+        ctx.fillRect(px - bw * 0.4, p2.y - 3 * s, bw * 0.9, 4 * s);
+        ctx.fillStyle = side < 0 ? "#d9d3c4" : "#e7d7c4";
         ctx.fillRect(px - bw / 2, p2.y - bh, bw, bh);
-        ctx.fillStyle = fogPaint("#7a3a30", fog);
+        ctx.fillStyle = "#8d3b32";
         ctx.beginPath();
         ctx.moveTo(px - bw * 0.62, p2.y - bh + 1);
-        ctx.lineTo(px, p2.y - bh - 11 * s);
+        ctx.lineTo(px, p2.y - bh - 12 * s);
         ctx.lineTo(px + bw * 0.62, p2.y - bh + 1);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = fogPaint("#7eb8d8", fog);
-        ctx.fillRect(px - bw * 0.28, p2.y - bh * 0.78, bw * 0.22, bh * 0.28);
-        ctx.fillRect(px + bw * 0.06, p2.y - bh * 0.78, bw * 0.22, bh * 0.28);
-        ctx.fillStyle = fogPaint("#5a4030", fog);
-        ctx.fillRect(px - bw * 0.08, p2.y - bh * 0.42, bw * 0.16, bh * 0.42);
+        ctx.fillStyle = "#9fd0ea";
+        ctx.fillRect(px - bw * 0.18, p2.y - bh * 0.72, bw * 0.36, bh * 0.32);
       }
-
-      // Skylt
-      if (n % 29 === 0 && fog < 0.75) {
-        const side = 1;
-        const px = p2.x + side * p2.w * 1.35;
-        ctx.fillStyle = fogPaint("#889098", fog);
-        ctx.fillRect(px - 1.2 * s, p2.y - 36 * s, 2.4 * s, 36 * s);
-        ctx.fillStyle = fogPaint("#1a6a3a", fog);
-        ctx.fillRect(px - 14 * s, p2.y - 48 * s, 28 * s, 14 * s);
-        ctx.strokeStyle = fogPaint("#f5f2e8", fog);
-        ctx.lineWidth = Math.max(1, s);
-        ctx.strokeRect(px - 14 * s, p2.y - 48 * s, 28 * s, 14 * s);
-      }
-
+      segmentBand(p1, p2, 0.01, -1.16, "#d5dbe3");
+      segmentBand(p1, p2, 0.01, 1.16, "#d5dbe3");
       clipY = p1.y;
     }
 
@@ -1766,9 +985,8 @@
     for (const { car, z, p } of visible) {
       const nearBoost = z < 12 ? 1.55 : z < 28 ? 1.25 : 1;
       const scale = Math.min(2.1, Math.max(0.22, (p.w / 360) * nearBoost));
-      const weave = Math.sin((car.z + performance.now() * 0.0004) * 0.35) * 0.03;
       drawCarSprite(
-        p.x + (car.x + weave) * p.w * 0.85,
+        p.x + car.x * p.w * 0.85,
         p.y,
         scale,
         car.color,
@@ -1777,20 +995,11 @@
       );
     }
 
-    const haze = ctx.createLinearGradient(0, h * 0.28, 0, h * 0.52);
+    const haze = ctx.createLinearGradient(0, h * 0.3, 0, h * 0.5);
     haze.addColorStop(0, "rgba(198,214,220,0)");
-    haze.addColorStop(0.55, "rgba(198,214,220,0.28)");
-    haze.addColorStop(1, "rgba(198,214,220,0.5)");
+    haze.addColorStop(1, "rgba(198,214,220,0.55)");
     ctx.fillStyle = haze;
-    ctx.fillRect(0, h * 0.28, w, h * 0.24);
-
-    // Vindrutereflektion / solfläck
-    const glass = ctx.createLinearGradient(0, 0, w * 0.4, h * 0.35);
-    glass.addColorStop(0, "rgba(255,255,255,0.08)");
-    glass.addColorStop(0.4, "rgba(255,255,255,0)");
-    glass.addColorStop(1, "rgba(180,210,255,0.04)");
-    ctx.fillStyle = glass;
-    ctx.fillRect(0, 0, w, h * 0.55);
+    ctx.fillRect(0, h * 0.3, w, h * 0.22);
 
     state.curve = segments[base].curve;
     ctx.restore();
@@ -1798,105 +1007,118 @@
   }
 
   function drawPlayerHood(w, h) {
-    const top = h * 0.76;
+    const top = h * 0.74;
     const paint = ctx.createLinearGradient(w * 0.5, top, w * 0.5, h);
-    paint.addColorStop(0, "#e02a36");
-    paint.addColorStop(0.12, "#b41824");
-    paint.addColorStop(0.4, "#7a1018");
-    paint.addColorStop(0.75, "#3a080c");
-    paint.addColorStop(1, "#180406");
+    paint.addColorStop(0, "#f03540");
+    paint.addColorStop(0.1, "#c41824");
+    paint.addColorStop(0.35, "#8a1018");
+    paint.addColorStop(0.65, "#4a080c");
+    paint.addColorStop(1, "#140204");
     ctx.fillStyle = paint;
     ctx.beginPath();
-    ctx.moveTo(w * 0.16, top + 10);
-    ctx.quadraticCurveTo(w * 0.5, top - h * 0.03, w * 0.84, top + 10);
-    ctx.lineTo(w * 1.05, h + 4);
-    ctx.lineTo(-w * 0.05, h + 4);
+    ctx.moveTo(w * 0.14, top + 14);
+    ctx.quadraticCurveTo(w * 0.5, top - h * 0.035, w * 0.86, top + 14);
+    ctx.lineTo(w * 1.06, h + 4);
+    ctx.lineTo(-w * 0.06, h + 4);
     ctx.closePath();
     ctx.fill();
 
-    // Huvlinjer
-    ctx.strokeStyle = "rgba(0,0,0,.28)";
-    ctx.lineWidth = 2;
+    // Power-bulge / huvlinjer
+    ctx.strokeStyle = "rgba(0,0,0,.32)";
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(w * 0.28, top + 18);
-    ctx.quadraticCurveTo(w * 0.32, h * 0.9, w * 0.3, h);
-    ctx.moveTo(w * 0.72, top + 18);
-    ctx.quadraticCurveTo(w * 0.68, h * 0.9, w * 0.7, h);
+    ctx.moveTo(w * 0.26, top + 20);
+    ctx.quadraticCurveTo(w * 0.3, h * 0.88, w * 0.28, h);
+    ctx.moveTo(w * 0.74, top + 20);
+    ctx.quadraticCurveTo(w * 0.7, h * 0.88, w * 0.72, h);
+    ctx.moveTo(w * 0.5, top + 16);
+    ctx.lineTo(w * 0.5, h);
     ctx.stroke();
 
-    // Glans i mitten
-    const gleam = ctx.createLinearGradient(w * 0.5, top, w * 0.5, h);
-    gleam.addColorStop(0, "rgba(255,255,255,.35)");
-    gleam.addColorStop(0.4, "rgba(255,255,255,.08)");
-    gleam.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = gleam;
-    ctx.beginPath();
-    ctx.moveTo(w * 0.46, top + 12);
-    ctx.lineTo(w * 0.54, top + 12);
-    ctx.lineTo(w * 0.56, h);
-    ctx.lineTo(w * 0.44, h);
-    ctx.closePath();
-    ctx.fill();
+    // Sidoreflexer
+    for (const side of [-1, 1]) {
+      const gleam = ctx.createLinearGradient(w * (0.5 + side * 0.22), top, w * (0.5 + side * 0.22), h);
+      gleam.addColorStop(0, "rgba(255,255,255,.22)");
+      gleam.addColorStop(0.5, "rgba(255,255,255,.04)");
+      gleam.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = gleam;
+      ctx.beginPath();
+      ctx.moveTo(w * (0.5 + side * 0.12), top + 18);
+      ctx.lineTo(w * (0.5 + side * 0.28), top + 22);
+      ctx.lineTo(w * (0.5 + side * 0.32), h);
+      ctx.lineTo(w * (0.5 + side * 0.08), h);
+      ctx.closePath();
+      ctx.fill();
+    }
 
-    // Vindrutebas / svart list
-    ctx.fillStyle = "rgba(10,8,8,.7)";
+    // Vindrutebas / svart list + torkarbas
+    ctx.fillStyle = "rgba(8,6,6,.82)";
     ctx.beginPath();
-    ctx.moveTo(w * 0.22, top + 4);
-    ctx.quadraticCurveTo(w * 0.5, top - 4, w * 0.78, top + 4);
-    ctx.lineTo(w * 0.76, top + 14);
-    ctx.quadraticCurveTo(w * 0.5, top + 8, w * 0.24, top + 14);
+    ctx.moveTo(w * 0.2, top + 2);
+    ctx.quadraticCurveTo(w * 0.5, top - 8, w * 0.8, top + 2);
+    ctx.lineTo(w * 0.78, top + 16);
+    ctx.quadraticCurveTo(w * 0.5, top + 10, w * 0.22, top + 16);
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = "#2a1a1c";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.32, top + 12);
+    ctx.lineTo(w * 0.42, top + 4);
+    ctx.moveTo(w * 0.55, top + 12);
+    ctx.lineTo(w * 0.68, top + 5);
+    ctx.stroke();
+
+    // Emblem
+    ctx.fillStyle = "rgba(255,224,138,.35)";
+    ctx.font = `bold ${Math.max(10, w * 0.018)}px Outfit, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("N", w * 0.5, top + (h - top) * 0.35);
 
     for (const side of [-1, 1]) {
-      const cx = w * (0.5 + side * 0.29);
-      const cy = top + (h - top) * 0.58;
+      const cx = w * (0.5 + side * 0.3);
+      const cy = top + (h - top) * 0.62;
       if (state.engineOn) {
-        const beam = ctx.createRadialGradient(cx, cy, 2, cx, cy - 36, 80);
-        beam.addColorStop(0, "rgba(255,240,200,.55)");
+        const beam = ctx.createRadialGradient(cx, cy, 2, cx, cy - 40, 90);
+        beam.addColorStop(0, "rgba(255,242,210,.6)");
         beam.addColorStop(1, "rgba(255,236,190,0)");
         ctx.fillStyle = beam;
         ctx.beginPath();
-        ctx.ellipse(cx, cy - 12, 60, 32, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy - 14, 70, 36, 0, 0, Math.PI * 2);
         ctx.fill();
       }
-      const lamp = ctx.createRadialGradient(cx - 4, cy - 3, 1, cx, cy, w * 0.035);
+      const lamp = ctx.createRadialGradient(cx - 4, cy - 3, 1, cx, cy, w * 0.038);
       lamp.addColorStop(0, state.engineOn ? "#fff" : "#fff8e8");
-      lamp.addColorStop(0.55, state.engineOn ? "#ffe08a" : "#d8d0b8");
-      lamp.addColorStop(1, "#6a6450");
+      lamp.addColorStop(0.5, state.engineOn ? "#ffe08a" : "#d8d0b8");
+      lamp.addColorStop(1, "#4a4030");
       ctx.fillStyle = lamp;
       ctx.beginPath();
-      ctx.ellipse(cx, cy, w * 0.032, h * 0.02, side * 0.2, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, w * 0.036, h * 0.022, side * 0.22, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "#1a0c0e";
       ctx.lineWidth = 2;
+      ctx.stroke();
+      // DRL-streck
+      ctx.strokeStyle = state.engineOn ? "rgba(220,240,255,.85)" : "rgba(180,190,200,.35)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - side * w * 0.01, cy + h * 0.018);
+      ctx.quadraticCurveTo(cx + side * w * 0.02, cy + h * 0.028, cx + side * w * 0.045, cy + h * 0.012);
       ctx.stroke();
     }
   }
 
   function drawMirrorView(mctx, mw, mh, mode) {
+    // mode: "rear" | "left" | "right" — riktig spegelvy bakåt/sidan
     mctx.clearRect(0, 0, mw, mh);
 
     const sky = mctx.createLinearGradient(0, 0, 0, mh * 0.48);
-    sky.addColorStop(0, "#2f6a9a");
-    sky.addColorStop(0.55, "#7eb4d0");
-    sky.addColorStop(1, "#c8e2f0");
+    sky.addColorStop(0, "#4f9ec8");
+    sky.addColorStop(1, "#c7e5f4");
     mctx.fillStyle = sky;
     mctx.fillRect(0, 0, mw, mh);
 
-    // Berg i spegeln
-    mctx.fillStyle = "#7a94a4";
-    mctx.beginPath();
-    mctx.moveTo(0, mh * 0.48);
-    for (let i = 0; i <= 8; i++) {
-      const px = (i / 8) * mw;
-      mctx.lineTo(px, mh * 0.48 - (8 + (i * 17) % 18));
-    }
-    mctx.lineTo(mw, mh * 0.48);
-    mctx.closePath();
-    mctx.fill();
-
-    mctx.fillStyle = "#3a6236";
+    mctx.fillStyle = "#3d6b38";
     mctx.fillRect(0, mh * 0.48, mw, mh * 0.52);
 
     const lean = state.steer * 0.00035 * (mode === "rear" ? -1 : mode === "left" ? -0.6 : 0.6);
@@ -1904,7 +1126,7 @@
     const topW = mode === "rear" ? mw * 0.12 : mw * 0.18;
     const botW = mode === "rear" ? mw * 0.95 : mw * 0.7;
 
-    mctx.fillStyle = "#2e343c";
+    mctx.fillStyle = "#323840";
     mctx.beginPath();
     mctx.moveTo(cx - topW / 2, mh * 0.48);
     mctx.lineTo(cx + topW / 2, mh * 0.48);
@@ -1913,66 +1135,53 @@
     mctx.closePath();
     mctx.fill();
 
-    // Kantlinjer
-    mctx.strokeStyle = "rgba(242,244,247,.7)";
-    mctx.lineWidth = 1.5;
-    mctx.beginPath();
-    mctx.moveTo(cx - topW * 0.9, mh * 0.5);
-    mctx.lineTo(cx - botW * 0.92, mh);
-    mctx.moveTo(cx + topW * 0.9, mh * 0.5);
-    mctx.lineTo(cx + botW * 0.92, mh);
-    mctx.stroke();
-
+    // Mittlinje (streckad bakåt)
     mctx.strokeStyle = "rgba(242,244,247,.85)";
     mctx.lineWidth = 2;
-    mctx.setLineDash([5, 7]);
+    mctx.setLineDash([6, 6]);
     mctx.beginPath();
     mctx.moveTo(cx, mh * 0.5);
     mctx.lineTo(cx, mh);
     mctx.stroke();
     mctx.setLineDash([]);
 
+    // Bilar bakom / bredvid
     for (const car of state.traffic) {
       const rel = car.z - state.pos / SEG_LEN;
       let z = ((rel % segments.length) + segments.length) % segments.length;
       if (mode === "rear") {
-        if (z < segments.length - 40 || z > segments.length - 2) continue;
-        const t = (segments.length - z) / 40;
-        const y = mh * (0.54 + t * 0.36);
-        const s = 0.22 + t * 0.6;
-        const x = cx + car.x * (mw * 0.28) * (1 - t * 0.25);
-        mctx.fillStyle = "rgba(0,0,0,.3)";
-        mctx.beginPath();
-        mctx.ellipse(x, y + 4 * s, 11 * s, 2.5 * s, 0, 0, Math.PI * 2);
-        mctx.fill();
-        mctx.fillStyle = car.color;
-        mctx.fillRect(x - 11 * s, y - 7 * s, 22 * s, 11 * s);
-        mctx.fillStyle = "#ff3030";
-        mctx.fillRect(x - 9 * s, y + 1 * s, 5 * s, 2.5 * s);
-        mctx.fillRect(x + 4 * s, y + 1 * s, 5 * s, 2.5 * s);
-      } else {
-        const sideOk = mode === "left" ? car.x < 0 : car.x > 0;
-        if (!sideOk || z < 4 || z > 42) continue;
-        const t = z / 42;
-        const y = mh * (0.52 + t * 0.35);
-        const s = 0.32 + (1 - t) * 0.42;
-        const x = mode === "left" ? mw * (0.22 + t * 0.22) : mw * (0.78 - t * 0.22);
+        if (z < segments.length - 35 || z > segments.length - 2) continue;
+        const t = (segments.length - z) / 35;
+        const y = mh * (0.55 + t * 0.35);
+        const s = 0.25 + t * 0.55;
+        const x = cx + car.x * (mw * 0.25) * (1 - t * 0.3);
         mctx.fillStyle = car.color;
         mctx.fillRect(x - 10 * s, y - 6 * s, 20 * s, 10 * s);
         mctx.fillStyle = "#ffe9a0";
-        mctx.fillRect(x - 8 * s, y - 5 * s, 4 * s, 2 * s);
-        mctx.fillRect(x + 4 * s, y - 5 * s, 4 * s, 2 * s);
+        mctx.fillRect(x - 8 * s, y + 2 * s, 4 * s, 2 * s);
+        mctx.fillRect(x + 4 * s, y + 2 * s, 4 * s, 2 * s);
+      } else {
+        const sideOk = mode === "left" ? car.x < 0 : car.x > 0;
+        if (!sideOk || z < 4 || z > 40) continue;
+        const t = z / 40;
+        const y = mh * (0.52 + t * 0.35);
+        const s = 0.35 + (1 - t) * 0.4;
+        const x = mode === "left" ? mw * (0.25 + t * 0.2) : mw * (0.75 - t * 0.2);
+        mctx.fillStyle = car.color;
+        mctx.fillRect(x - 9 * s, y - 5 * s, 18 * s, 9 * s);
       }
     }
 
+    // Glasskimmer
     const sheen = mctx.createLinearGradient(0, 0, mw, mh);
-    sheen.addColorStop(0, "rgba(255,255,255,.2)");
-    sheen.addColorStop(0.35, "rgba(255,255,255,0)");
-    sheen.addColorStop(1, "rgba(160,200,255,.12)");
+    sheen.addColorStop(0, "rgba(255,255,255,.18)");
+    sheen.addColorStop(0.4, "rgba(255,255,255,0)");
+    sheen.addColorStop(1, "rgba(180,210,255,.1)");
     mctx.fillStyle = sheen;
     mctx.fillRect(0, 0, mw, mh);
 
-    mctx.strokeStyle = "rgba(0,0,0,.4)";
+    // Kant
+    mctx.strokeStyle = "rgba(0,0,0,.35)";
     mctx.lineWidth = 2;
     mctx.strokeRect(1, 1, mw - 2, mh - 2);
   }
@@ -1995,226 +1204,68 @@
   function drawMinimap() {
     const mw = minimap.width;
     const mh = minimap.height;
-    const scale = 0.52;
+    mapCtx.clearRect(0, 0, mw, mh);
+
+    // Gräs
+    mapCtx.fillStyle = "#2f552c";
+    mapCtx.fillRect(0, 0, mw, mh);
+
+    const scale = 0.48;
     const ox = mw / 2;
     const oy = mh / 2;
 
-    mapCtx.clearRect(0, 0, mw, mh);
-
-    // GPS-stil: kartan roterar så bilen alltid pekar uppåt
-    mapCtx.save();
-    mapCtx.translate(ox, oy);
-    mapCtx.rotate(-state.heading);
-    mapCtx.translate(-state.mapX * scale, -state.mapZ * scale);
-
-    // Terrängbotten
-    mapCtx.fillStyle = "#1e3a28";
-    mapCtx.fillRect(-220, -180, 440, 360);
-
-    // Park / skogsområden
-    const parks = [
-      [-90, -55, 50, 40],
-      [70, 40, 55, 35],
-      [-40, 60, 35, 30],
-      [55, -70, 40, 28],
-    ];
-    for (const [px, pz, pw, ph] of parks) {
-      mapCtx.fillStyle = "#2a5a34";
-      mapCtx.beginPath();
-      mapCtx.ellipse(px * scale, pz * scale, pw * scale, ph * scale, 0, 0, Math.PI * 2);
-      mapCtx.fill();
-      mapCtx.fillStyle = "#3a7044";
-      mapCtx.beginPath();
-      mapCtx.ellipse(px * scale + 4, pz * scale - 3, pw * scale * 0.45, ph * scale * 0.4, 0, 0, Math.PI * 2);
-      mapCtx.fill();
-    }
-
-    // Vatten
-    mapCtx.fillStyle = "#2a6a8a";
+    // Oval väg
+    mapCtx.strokeStyle = "#3a4048";
+    mapCtx.lineWidth = 14;
     mapCtx.beginPath();
-    mapCtx.ellipse(20 * scale, -10 * scale, 28 * scale, 18 * scale, 0.3, 0, Math.PI * 2);
-    mapCtx.fill();
-    mapCtx.fillStyle = "rgba(180,220,240,.25)";
+    mapCtx.ellipse(ox, oy, 140 * scale, 95 * scale, 0, 0, Math.PI * 2);
+    mapCtx.stroke();
+    mapCtx.strokeStyle = "#f2f4f7";
+    mapCtx.lineWidth = 1.5;
+    mapCtx.setLineDash([4, 4]);
     mapCtx.beginPath();
-    mapCtx.ellipse(14 * scale, -14 * scale, 10 * scale, 6 * scale, 0.3, 0, Math.PI * 2);
-    mapCtx.fill();
-
-    // Kvarter / byggnadsblock
-    const blocks = [
-      [-100, -40, 28, 22], [-100, 20, 28, 24],
-      [75, -35, 30, 20], [75, 25, 30, 26],
-      [-45, -80, 32, 18], [20, 70, 36, 20],
-      [-70, 45, 22, 18], [40, -55, 24, 16],
-    ];
-    for (const [bx, bz, bw, bh] of blocks) {
-      mapCtx.fillStyle = "#3a4550";
-      mapCtx.fillRect((bx - bw / 2) * scale, (bz - bh / 2) * scale, bw * scale, bh * scale);
-      mapCtx.fillStyle = "#4a5864";
-      mapCtx.fillRect((bx - bw / 2) * scale, (bz - bh / 2) * scale, bw * scale, 3);
-    }
-
-    function strokeRoad(drawPath, width, color) {
-      mapCtx.strokeStyle = color;
-      mapCtx.lineWidth = width;
-      mapCtx.lineCap = "round";
-      mapCtx.lineJoin = "round";
-      mapCtx.beginPath();
-      drawPath();
-      mapCtx.stroke();
-    }
-
-    // Oval huvudväg (asfalt)
-    const rx = 140 * scale;
-    const rz = 95 * scale;
-    strokeRoad(() => mapCtx.ellipse(0, 0, rx, rz, 0, 0, Math.PI * 2), 16, "#2a3038");
-    strokeRoad(() => mapCtx.ellipse(0, 0, rx, rz, 0, 0, Math.PI * 2), 13, "#4a5560");
-    // Kantlinjer
-    mapCtx.setLineDash([]);
-    strokeRoad(() => mapCtx.ellipse(0, 0, rx + 5.5, rz + 5.5, 0, 0, Math.PI * 2), 1.2, "rgba(230,235,240,.55)");
-    strokeRoad(() => mapCtx.ellipse(0, 0, rx - 5.5, rz - 5.5, 0, 0, Math.PI * 2), 1.2, "rgba(230,235,240,.55)");
-    // Mittstreck
-    mapCtx.setLineDash([5, 6]);
-    strokeRoad(() => mapCtx.ellipse(0, 0, rx, rz, 0, 0, Math.PI * 2), 1.4, "rgba(255,220,100,.85)");
-    mapCtx.setLineDash([]);
-
-    // Korsvägar
-    strokeRoad(() => {
-      mapCtx.moveTo(-140 * scale, 0);
-      mapCtx.lineTo(140 * scale, 0);
-    }, 14, "#2a3038");
-    strokeRoad(() => {
-      mapCtx.moveTo(-140 * scale, 0);
-      mapCtx.lineTo(140 * scale, 0);
-    }, 11, "#4a5560");
-    strokeRoad(() => {
-      mapCtx.moveTo(0, -95 * scale);
-      mapCtx.lineTo(0, 95 * scale);
-    }, 14, "#2a3038");
-    strokeRoad(() => {
-      mapCtx.moveTo(0, -95 * scale);
-      mapCtx.lineTo(0, 95 * scale);
-    }, 11, "#4a5560");
-
-    mapCtx.setLineDash([4, 5]);
-    mapCtx.strokeStyle = "rgba(255,220,100,.75)";
-    mapCtx.lineWidth = 1.2;
-    mapCtx.beginPath();
-    mapCtx.moveTo(-130 * scale, 0);
-    mapCtx.lineTo(130 * scale, 0);
-    mapCtx.moveTo(0, -85 * scale);
-    mapCtx.lineTo(0, 85 * scale);
+    mapCtx.ellipse(ox, oy, 140 * scale, 95 * scale, 0, 0, Math.PI * 2);
     mapCtx.stroke();
     mapCtx.setLineDash([]);
 
-    // POI-markörer
-    const pois = [
-      { x: -90, z: 0, label: "P", color: "#3a8ad4" },
-      { x: 0, z: -70, label: "⛽", color: "#d4a03a" },
-      { x: 90, z: 20, label: "H", color: "#d44a4a" },
-      { x: -30, z: 70, label: "★", color: "#5ad27a" },
-    ];
-    for (const poi of pois) {
-      const qx = poi.x * scale;
-      const qz = poi.z * scale;
-      mapCtx.fillStyle = poi.color;
-      mapCtx.beginPath();
-      mapCtx.arc(qx, qz, 5, 0, Math.PI * 2);
-      mapCtx.fill();
-      mapCtx.fillStyle = "#fff";
-      mapCtx.font = "bold 7px sans-serif";
-      mapCtx.textAlign = "center";
-      mapCtx.textBaseline = "middle";
-      mapCtx.fillText(poi.label, qx, qz + 0.5);
-    }
+    // Korsning
+    mapCtx.strokeStyle = "#3a4048";
+    mapCtx.lineWidth = 12;
+    mapCtx.beginPath();
+    mapCtx.moveTo(ox - 140 * scale, oy);
+    mapCtx.lineTo(ox + 140 * scale, oy);
+    mapCtx.moveTo(ox, oy - 95 * scale);
+    mapCtx.lineTo(ox, oy + 95 * scale);
+    mapCtx.stroke();
 
-    // Trafik
-    for (let i = 0; i < state.traffic.length; i++) {
+    // Andra bilar på kartan (ungefär)
+    for (let i = 0; i < state.traffic.length; i += 2) {
       const car = state.traffic[i];
-      const ang = ((car.z % 64) / 64) * Math.PI * 2;
-      const lane = car.oncoming ? 0.86 : 1.0;
-      const cx = Math.cos(ang) * 140 * scale * lane * (car.x < 0 ? 0.92 : 1.02);
-      const cy = Math.sin(ang) * 95 * scale * lane * (car.x < 0 ? 0.92 : 1.02);
-      mapCtx.save();
-      mapCtx.translate(cx, cy);
-      mapCtx.rotate(ang + Math.PI / 2 + (car.oncoming ? Math.PI : 0));
+      const ang = ((car.z % 64) / 64) * Math.PI * 2 + state.heading;
+      const cx = ox + Math.cos(ang) * 140 * scale * 0.92;
+      const cy = oy + Math.sin(ang) * 95 * scale * 0.92;
       mapCtx.fillStyle = car.color;
-      mapCtx.fillRect(-2.5, -4, 5, 8);
-      mapCtx.fillStyle = "rgba(255,255,255,.35)";
-      mapCtx.fillRect(-1.5, -3, 3, 2);
-      mapCtx.restore();
+      mapCtx.fillRect(cx - 2, cy - 2, 4, 4);
     }
 
-    mapCtx.restore();
-
-    // Spelarpil (alltid i mitten, pekar upp)
+    // Spelare
+    const px = ox + state.mapX * scale;
+    const pz = oy + state.mapZ * scale;
     mapCtx.save();
-    mapCtx.translate(ox, oy);
-    // Skugga
-    mapCtx.fillStyle = "rgba(0,0,0,.35)";
-    mapCtx.beginPath();
-    mapCtx.moveTo(0, -9);
-    mapCtx.lineTo(7, 8);
-    mapCtx.lineTo(0, 4);
-    mapCtx.lineTo(-7, 8);
-    mapCtx.closePath();
-    mapCtx.fill();
-    // Bilpil
-    const arrow = mapCtx.createLinearGradient(0, -10, 0, 8);
-    arrow.addColorStop(0, "#ff6a6a");
-    arrow.addColorStop(1, "#c01020");
-    mapCtx.fillStyle = arrow;
-    mapCtx.beginPath();
-    mapCtx.moveTo(0, -9);
-    mapCtx.lineTo(6.5, 7);
-    mapCtx.lineTo(0, 3.5);
-    mapCtx.lineTo(-6.5, 7);
-    mapCtx.closePath();
-    mapCtx.fill();
-    mapCtx.strokeStyle = "#fff";
-    mapCtx.lineWidth = 1;
-    mapCtx.stroke();
-    mapCtx.restore();
-
-    // Kompass N
-    mapCtx.save();
-    mapCtx.translate(mw - 16, 16);
-    mapCtx.rotate(-state.heading);
-    mapCtx.fillStyle = "#e8f0f8";
+    mapCtx.translate(px, pz);
+    mapCtx.rotate(state.heading);
+    mapCtx.fillStyle = "#e81e30";
     mapCtx.beginPath();
     mapCtx.moveTo(0, -7);
-    mapCtx.lineTo(4, 5);
-    mapCtx.lineTo(0, 2);
-    mapCtx.lineTo(-4, 5);
+    mapCtx.lineTo(5, 6);
+    mapCtx.lineTo(0, 3);
+    mapCtx.lineTo(-5, 6);
     mapCtx.closePath();
     mapCtx.fill();
-    mapCtx.fillStyle = "#ff6a6a";
-    mapCtx.font = "bold 8px sans-serif";
-    mapCtx.textAlign = "center";
-    mapCtx.fillText("N", 0, -9);
     mapCtx.restore();
 
-    // Hastighet / GPS-hud
-    const kmh = Math.round(Math.abs(state.speed) * 3.6);
-    mapCtx.fillStyle = "rgba(0,0,0,.45)";
-    mapCtx.fillRect(4, mh - 22, 48, 16);
-    mapCtx.fillStyle = "#8dffb4";
-    mapCtx.font = "bold 10px sans-serif";
-    mapCtx.textAlign = "left";
-    mapCtx.fillText(`${kmh}`, 8, mh - 10);
-    mapCtx.fillStyle = "#9eb0c0";
-    mapCtx.font = "8px sans-serif";
-    mapCtx.fillText("km/h", 28, mh - 10);
-
-    // Glasglans
-    const sheen = mapCtx.createLinearGradient(0, 0, mw, mh);
-    sheen.addColorStop(0, "rgba(255,255,255,.08)");
-    sheen.addColorStop(0.4, "rgba(255,255,255,0)");
-    sheen.addColorStop(1, "rgba(100,160,220,.06)");
-    mapCtx.fillStyle = sheen;
-    mapCtx.fillRect(0, 0, mw, mh);
-
     // Ram
-    mapCtx.strokeStyle = "rgba(255,255,255,.22)";
+    mapCtx.strokeStyle = "rgba(255,255,255,.2)";
     mapCtx.lineWidth = 2;
     mapCtx.strokeRect(1, 1, mw - 2, mh - 2);
   }
@@ -2334,39 +1385,22 @@
     if (state.input.left) turn -= 1;
     if (state.input.right) turn += 1;
 
-    // Tyngre ratt i fart, mer grepp i sport
-    // Om man drar i ratten med musen: låt inte fysiken kämpa emot
-    if (!state.wheelDragging) {
-      const speedFactor = 1 / (1 + state.speed * (sport ? 0.032 : 0.048));
-      const steerGain = sport ? 420 : 200;
-      const selfCenter = sport ? 1.9 : 3.1;
-      const damp = sport ? 4.2 : 6.6;
-      state.steerRate += (turn * steerGain * speedFactor - state.steer * selfCenter - state.steerRate * damp) * dt;
-      state.steer += state.steerRate * dt;
-      state.steer = Math.max(-520, Math.min(520, state.steer));
-      if (turn === 0) {
-        state.steer *= 1 - Math.min(1, dt * (sport ? 1.8 : 2.6));
-        state.steerRate *= 1 - Math.min(1, dt * (sport ? 2.8 : 3.8));
-      }
-    } else {
-      state.steerRate = 0;
+    const speedFactor = 1 / (1 + state.speed * 0.04);
+    const steerGain = sport ? 380 : 180;
+    state.steerRate += (turn * steerGain * speedFactor - state.steer * (sport ? 2.2 : 3.4) - state.steerRate * (sport ? 4.5 : 7)) * dt;
+    state.steer += state.steerRate * dt;
+    state.steer = Math.max(-480, Math.min(480, state.steer));
+    if (turn === 0) {
+      state.steer *= 1 - Math.min(1, dt * 2.4);
+      state.steerRate *= 1 - Math.min(1, dt * 3.5);
     }
 
-    const pull = state.curve * 0.00125 * state.speed;
-    const latGain = sport ? 0.55 : 0.26;
-    state.playerX += (state.steer / 1180) * state.speed * dt * latGain - pull * dt;
-
-    // Vägren / gräs — skumpar och bromsar
-    if (Math.abs(state.playerX) > 0.92) {
-      state.bump = Math.max(state.bump, 0.35 + Math.min(0.5, Math.abs(state.speed) * 0.02));
-      state.speed *= 1 - dt * (1.1 + Math.abs(state.playerX - 0.92) * 2);
+    const pull = state.curve * 0.0011 * state.speed;
+    state.playerX += (state.steer / 1200) * state.speed * dt * (sport ? 0.5 : 0.22) - pull * dt;
+    if (Math.abs(state.playerX) > 1.05) {
+      state.speed *= 1 - dt * 0.7;
+      state.playerX = Math.sign(state.playerX) * 1.05;
     }
-    if (Math.abs(state.playerX) > 1.08) {
-      state.speed *= 1 - dt * 0.9;
-      state.playerX = Math.sign(state.playerX) * 1.08;
-      state.bump = Math.max(state.bump, 0.7);
-    }
-    if (state.bump > 0) state.bump = Math.max(0, state.bump - dt * 2.4);
 
     // Kör runt på kartan: styrning vrider bilen, gas flyttar dig
     const turnRate = (state.steer / 420) * Math.min(1, Math.abs(state.speed) / 8) * 1.8;
@@ -2440,8 +1474,6 @@
       hint.textContent = "Lite hög växel — Q växlar ner om det känns segt";
     } else if (Math.abs(state.speed) < 2 && !gas) {
       hint.textContent = "W gas · S broms · A/D sväng · E upp · Q ner";
-    } else if (Math.abs(state.playerX) > 0.92) {
-      hint.textContent = "Vägren! Sväng tillbaka på asfalten";
     } else if (state.playerX < 0.05) {
       hint.textContent = "Du är för långt åt vänster — håll dig till höger ▶";
     } else if (state.playerX > 0.85) {
@@ -2656,16 +1688,7 @@
     if (!state.inside) return;
     const kmh = Math.round(Math.abs(state.speed) * 3.6);
     speedEl.textContent = String(kmh);
-    const steerDeg = state.steer * 0.2;
-    // 3D-ratt: tippad mot föraren + snurr vid styrning
-    steering.style.transform = `rotateX(28deg) rotateY(${(-state.steer * 0.012).toFixed(2)}deg) rotateZ(${steerDeg}deg) translateZ(8px)`;
-    // 3D-kupé följer styrning och fart
-    const roll = Math.max(-4.5, Math.min(4.5, state.steer * 0.007));
-    const yaw = Math.max(-3.5, Math.min(3.5, -state.steer * 0.005));
-    const pitch = Math.max(-2.5, Math.min(3, (state.input.up ? -1.8 : 0) + (state.input.down ? 2.2 : 0) + state.speed * 0.01));
-    app.style.setProperty("--cabin-roll", `${roll}deg`);
-    app.style.setProperty("--cabin-yaw", `${yaw}deg`);
-    app.style.setProperty("--cabin-pitch", `${pitch}deg`);
+    steering.style.transform = `rotate(${state.steer * 0.2}deg)`;
     const rpmAngle = -120 + Math.min(240, (state.rpm / 8000) * 240);
     rpmNeedle.setAttribute("transform", `rotate(${rpmAngle} 50 50)`);
     const fuelAngle = -110 + state.fuel * 220;
@@ -2996,522 +2019,11 @@
         : "Komfortläge: mjuk gas, lugn styrning, tystare";
       toast(sport ? "Sportläge på" : "Komfortläge på", 1600);
     }
-    if (carScreenState.app === "korlage") openCarApp("korlage");
-  }
-
-  // —— Bilskärm med appar ——
-  const carScreen = document.getElementById("carScreen");
-  const screenHome = document.getElementById("screenHome");
-  const screenApp = document.getElementById("screenApp");
-  const screenAppBody = document.getElementById("screenAppBody");
-  const screenAppTitle = document.getElementById("screenAppTitle");
-  const screenOff = document.getElementById("screenOff");
-  const screenApps = document.getElementById("screenApps");
-  const screenTime = document.getElementById("screenTime");
-
-  const carScreenState = {
-    app: null,
-    off: false,
-    musicOn: false,
-    radioOn: false,
-    track: 0,
-    temp: 21,
-    ac: true,
-    radio: 0,
-    call: null,
-    ytId: null,
-  };
-
-  const SCREEN_APPS = [
-    { id: "musik", name: "Musik", icon: "♪" },
-    { id: "youtube", name: "YouTube", icon: "▶" },
-    { id: "navi", name: "Navi", icon: "◎" },
-    { id: "klimat", name: "Klimat", icon: "❄" },
-    { id: "telefon", name: "Telefon", icon: "☎" },
-    { id: "korlage", name: "Körläge", icon: "⚑" },
-    { id: "radio", name: "Radio", icon: "◈" },
-  ];
-
-  const YT_PRESETS = [
-    { id: "jfKfPfyJRdk", label: "Lofi" },
-    { id: "5qap5aO4i9A", label: "Chill" },
-    { id: "DWcJFNf70Ic", label: "Drive" },
-    { id: "aqz-KE-bpKQ", label: "Big Buck" },
-  ];
-
-  const TRACKS = MUSIC_TRACKS.map((t) => t.name);
-  const STATIONS = RADIO_STATIONS.map((s) => s.name);
-  const CONTACTS = ["Mamma", "Kompis", "Verkstad", "Nermin"];
-  const PLACES = ["Hem", "Ring-ateljé", "Bensinstation", "Stad"];
-
-  function tickScreenClock() {
-    if (!screenTime) return;
-    const d = new Date();
-    screenTime.textContent = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function renderScreenHome() {
-    if (!screenApps) return;
-    screenApps.innerHTML = "";
-    for (const item of SCREEN_APPS) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "screen-app-btn";
-      btn.setAttribute("role", "listitem");
-      btn.dataset.app = item.id;
-      btn.innerHTML = `<span class="screen-app-icon ${item.id}">${item.icon}</span><span>${item.name}</span>`;
-      btn.addEventListener("click", () => openCarApp(item.id));
-      screenApps.appendChild(btn);
-    }
-  }
-
-  function showScreenHome() {
-    carScreenState.app = null;
-    closeYouTube(false);
-    const frame = document.getElementById("ytFrame");
-    const wrap = document.querySelector(".yt-player-wrap");
-    if (frame) frame.src = "";
-    wrap?.classList.remove("has-video");
-    carScreenState.ytId = null;
-    if (screenHome) screenHome.hidden = false;
-    if (screenApp) screenApp.hidden = true;
-    if (screenOff) screenOff.hidden = true;
-  }
-
-  function setScreenPower(on) {
-    carScreenState.off = !on;
-    if (carScreen) carScreen.dataset.off = on ? "0" : "1";
-    if (screenOff) screenOff.hidden = on;
-    if (!on) {
-      if (screenHome) screenHome.hidden = true;
-      if (screenApp) screenApp.hidden = true;
-    } else {
-      showScreenHome();
-    }
-  }
-
-  function parseYouTubeId(input) {
-    if (!input) return null;
-    const raw = String(input).trim();
-    if (/^[\w-]{11}$/.test(raw)) return raw;
-    try {
-      const url = new URL(raw);
-      if (url.hostname.includes("youtu.be")) {
-        const id = url.pathname.split("/").filter(Boolean)[0];
-        return id && /^[\w-]{11}$/.test(id) ? id : null;
-      }
-      if (url.hostname.includes("youtube.com") || url.hostname.includes("youtube-nocookie.com")) {
-        const v = url.searchParams.get("v");
-        if (v && /^[\w-]{11}$/.test(v)) return v;
-        const parts = url.pathname.split("/").filter(Boolean);
-        const markers = ["embed", "shorts", "live", "v"];
-        for (let i = 0; i < parts.length - 1; i++) {
-          if (markers.includes(parts[i]) && /^[\w-]{11}$/.test(parts[i + 1])) return parts[i + 1];
-        }
-      }
-    } catch (_) {
-      /* ignore */
-    }
-    const m = raw.match(/(?:v=|\/embed\/|\/shorts\/|youtu\.be\/)([\w-]{11})/);
-    return m ? m[1] : null;
-  }
-
-  function playYouTube(videoId) {
-    const frame = document.getElementById("ytFrame");
-    const wrap = document.querySelector(".yt-player-wrap");
-    const input = document.getElementById("ytInput");
-    if (!frame || !videoId) return;
-    // Pausa bilmusik/radio så YouTube hörs
-    stopMusic();
-    carScreenState.ytId = videoId;
-    frame.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
-    wrap?.classList.add("has-video");
-    if (input) input.value = `https://youtu.be/${videoId}`;
-    document.querySelectorAll(".yt-preset").forEach((btn) => {
-      btn.classList.toggle("on", btn.dataset.id === videoId);
-    });
-    toast("YouTube spelar", 1200);
-  }
-
-  function openYouTube() {
-    const overlay = document.getElementById("ytOverlay");
-    if (!overlay) return;
-    overlay.hidden = false;
-    carScreenState.app = "youtube";
-    if (screenHome) screenHome.hidden = true;
-    if (screenApp) {
-      screenApp.hidden = false;
-      if (screenAppTitle) screenAppTitle.textContent = "YouTube";
-      if (screenAppBody) {
-        screenAppBody.innerHTML = "";
-        const p = document.createElement("p");
-        p.textContent = "Stor skärm öppen";
-        const row = document.createElement("div");
-        row.className = "screen-row";
-        row.append(
-          action("Visa skärm", {
-            primary: true,
-            onClick: () => {
-              overlay.hidden = false;
-            },
-          }),
-          action("Stäng", {
-            onClick: closeYouTube,
-          })
-        );
-        screenAppBody.append(p, row);
-      }
-    }
-    if (!carScreenState.ytId) {
-      // Starta med en preset så det syns direkt
-      playYouTube(YT_PRESETS[0].id);
-    }
-  }
-
-  function closeYouTube(full = false) {
-    const overlay = document.getElementById("ytOverlay");
-    const frame = document.getElementById("ytFrame");
-    const wrap = document.querySelector(".yt-player-wrap");
-    if (overlay) overlay.hidden = true;
-    if (full) {
-      if (frame) frame.src = "";
-      wrap?.classList.remove("has-video");
-      carScreenState.ytId = null;
-      document.querySelectorAll(".yt-preset").forEach((btn) => btn.classList.remove("on"));
-      showScreenHome();
-    }
-  }
-
-  function initYouTube() {
-    const presets = document.getElementById("ytPresets");
-    const form = document.getElementById("ytForm");
-    const closeBtn = document.getElementById("ytClose");
-    if (presets) {
-      presets.innerHTML = "";
-      for (const item of YT_PRESETS) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "yt-preset";
-        btn.dataset.id = item.id;
-        btn.textContent = item.label;
-        btn.addEventListener("click", () => playYouTube(item.id));
-        presets.appendChild(btn);
-      }
-    }
-    form?.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const input = document.getElementById("ytInput");
-      const id = parseYouTubeId(input?.value || "");
-      if (!id) {
-        toast("Klistra in en giltig YouTube-länk", 1800);
-        return;
-      }
-      playYouTube(id);
-    });
-    closeBtn?.addEventListener("click", () => closeYouTube(true));
-    document.getElementById("ytOverlay")?.addEventListener("click", (e) => {
-      if (e.target.id === "ytOverlay") closeYouTube(false);
-    });
-  }
-
-  function openCarApp(id) {
-    if (carScreenState.off) return;
-    const meta = SCREEN_APPS.find((a) => a.id === id);
-    if (!meta) return;
-    if (id === "youtube") {
-      openYouTube();
-      return;
-    }
-    closeYouTube(false);
-    carScreenState.app = id;
-    if (screenHome) screenHome.hidden = true;
-    if (screenApp) screenApp.hidden = false;
-    if (screenOff) screenOff.hidden = true;
-    if (screenAppTitle) screenAppTitle.textContent = meta.name;
-    renderCarApp(id);
-  }
-
-  function chip(label, opts = {}) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `screen-chip${opts.on ? " on" : ""}${opts.danger ? " danger" : ""}`;
-    b.textContent = label;
-    if (opts.onClick) b.addEventListener("click", opts.onClick);
-    return b;
-  }
-
-  function action(label, opts = {}) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `screen-action${opts.primary ? " primary" : ""}`;
-    b.textContent = label;
-    if (opts.onClick) b.addEventListener("click", opts.onClick);
-    return b;
-  }
-
-  function renderCarApp(id) {
-    if (!screenAppBody) return;
-    screenAppBody.innerHTML = "";
-
-    if (id === "musik") {
-      carScreenState.musicOn = !!(audio.music && audio.music.playing);
-      const title = document.createElement("p");
-      title.textContent = TRACKS[carScreenState.track];
-      const big = document.createElement("div");
-      big.className = "screen-big";
-      big.textContent = carScreenState.musicOn ? "▶ Spelar" : "❚❚ Paus";
-      const row = document.createElement("div");
-      row.className = "screen-row";
-      row.append(
-        action(carScreenState.musicOn ? "Pausa" : "Spela", {
-          primary: true,
-          onClick: () => {
-            toggleMusic();
-            toast(carScreenState.musicOn ? `Spelar: ${TRACKS[carScreenState.track]}` : "Musik pausad", 1400);
-            renderCarApp("musik");
-          },
-        }),
-        action("Nästa", {
-          onClick: () => {
-            nextMusicTrack();
-            toast(`Nästa: ${TRACKS[carScreenState.track]}`, 1400);
-            renderCarApp("musik");
-          },
-        })
-      );
-      const list = document.createElement("div");
-      list.className = "screen-row";
-      TRACKS.forEach((name, i) => {
-        list.append(
-          chip(name.split(" ")[0], {
-            on: i === carScreenState.track && carScreenState.musicOn,
-            onClick: () => {
-              carScreenState.track = i;
-              carScreenState.musicOn = true;
-              startMusic(i);
-              toast(`Spelar: ${name}`, 1400);
-              renderCarApp("musik");
-            },
-          })
-        );
-      });
-      screenAppBody.append(title, big, row, list);
-      return;
-    }
-
-    if (id === "navi") {
-      const p = document.createElement("p");
-      p.textContent = "Vart ska vi?";
-      const row = document.createElement("div");
-      row.className = "screen-row";
-      for (const place of PLACES) {
-        row.append(
-          chip(place, {
-            onClick: () => {
-              toast(`Navi: kör mot ${place}`, 1800);
-              hint.textContent = `Navigation till ${place} — följ vägen`;
-            },
-          })
-        );
-      }
-      screenAppBody.append(p, row);
-      return;
-    }
-
-    if (id === "klimat") {
-      const big = document.createElement("div");
-      big.className = "screen-big";
-      big.textContent = `${carScreenState.temp}°`;
-      const row = document.createElement("div");
-      row.className = "screen-row";
-      row.append(
-        action("−", {
-          onClick: () => {
-            carScreenState.temp = Math.max(16, carScreenState.temp - 1);
-            renderCarApp("klimat");
-          },
-        }),
-        action("+", {
-          onClick: () => {
-            carScreenState.temp = Math.min(28, carScreenState.temp + 1);
-            renderCarApp("klimat");
-          },
-        }),
-        chip(carScreenState.ac ? "AC på" : "AC av", {
-          on: carScreenState.ac,
-          onClick: () => {
-            carScreenState.ac = !carScreenState.ac;
-            toast(carScreenState.ac ? "AC på" : "AC av", 1200);
-            renderCarApp("klimat");
-          },
-        })
-      );
-      const hintP = document.createElement("p");
-      hintP.textContent = carScreenState.ac ? "Luftkonditionering kör" : "Fläkt utan AC";
-      screenAppBody.append(big, row, hintP);
-      return;
-    }
-
-    if (id === "telefon") {
-      const p = document.createElement("p");
-      p.textContent = carScreenState.call ? `Samtal: ${carScreenState.call}` : "Välj kontakt";
-      const row = document.createElement("div");
-      row.className = "screen-row";
-      if (carScreenState.call) {
-        row.append(
-          action("Lägg på", {
-            primary: true,
-            onClick: () => {
-              toast(`Samtal med ${carScreenState.call} avslutat`, 1400);
-              carScreenState.call = null;
-              renderCarApp("telefon");
-            },
-          })
-        );
-      } else {
-        for (const name of CONTACTS) {
-          row.append(
-            chip(name, {
-              onClick: () => {
-                carScreenState.call = name;
-                toast(`Ringer ${name}…`, 1600);
-                renderCarApp("telefon");
-              },
-            })
-          );
-        }
-      }
-      screenAppBody.append(p, row);
-      return;
-    }
-
-    if (id === "korlage") {
-      const p = document.createElement("p");
-      p.textContent = "Välj hur bilen ska kännas";
-      const row = document.createElement("div");
-      row.className = "screen-row";
-      row.append(
-        chip("Komfort", {
-          on: state.driveMode === "comfort",
-          onClick: () => setDriveMode("comfort"),
-        }),
-        chip("Sport", {
-          on: state.driveMode === "sport",
-          danger: true,
-          onClick: () => setDriveMode("sport"),
-        })
-      );
-      const info = document.createElement("p");
-      info.textContent =
-        state.driveMode === "sport"
-          ? "Vass gas · starkt ljud · snabb ratt"
-          : "Mjuk gas · tystare · lugn ratt";
-      screenAppBody.append(p, row, info);
-      return;
-    }
-
-    if (id === "radio") {
-      carScreenState.radioOn = !!(audio.music && audio.music.playing && audio.music.mode === "radio");
-      const big = document.createElement("div");
-      big.className = "screen-big";
-      big.style.fontSize = "1.05rem";
-      big.textContent = STATIONS[carScreenState.radio];
-      const status = document.createElement("p");
-      status.textContent = carScreenState.radioOn ? "● Sänder" : "○ Av";
-      const row = document.createElement("div");
-      row.className = "screen-row";
-      row.append(
-        action(carScreenState.radioOn ? "Stäng av" : "Slå på", {
-          primary: true,
-          onClick: () => {
-            toggleRadio();
-            toast(
-              carScreenState.radioOn ? `Radio: ${STATIONS[carScreenState.radio]}` : "Radio av",
-              1400
-            );
-            renderCarApp("radio");
-          },
-        }),
-        action("←", {
-          onClick: () => {
-            changeRadioStation(-1);
-            toast(STATIONS[carScreenState.radio], 1200);
-            renderCarApp("radio");
-          },
-        }),
-        action("→", {
-          onClick: () => {
-            changeRadioStation(1);
-            toast(STATIONS[carScreenState.radio], 1200);
-            renderCarApp("radio");
-          },
-        })
-      );
-      const list = document.createElement("div");
-      list.className = "screen-row";
-      RADIO_STATIONS.forEach((st, i) => {
-        list.append(
-          chip(st.short || st.name, {
-            on: i === carScreenState.radio && carScreenState.radioOn,
-            onClick: () => {
-              carScreenState.radio = i;
-              startRadio(i);
-              toast(`Radio: ${st.name}`, 1400);
-              renderCarApp("radio");
-            },
-          })
-        );
-      });
-      screenAppBody.append(big, status, row, list);
-    }
-  }
-
-  function initCarScreen() {
-    renderScreenHome();
-    initYouTube();
-    tickScreenClock();
-    setInterval(tickScreenClock, 20000);
-    showScreenHome();
-    document.getElementById("screenBack")?.addEventListener("click", showScreenHome);
-    document.getElementById("screenWake")?.addEventListener("click", () => setScreenPower(true));
-    // Långtryck på statusraden stänger av skärmen
-    document.querySelector(".screen-bar")?.addEventListener("dblclick", () => {
-      setScreenPower(false);
-      toast("Skärm av — dubbelklicka igen via Slå på", 1600);
-    });
   }
 
   function setInput(dir, on) {
     if (state.phase !== "drive") return;
     if (dir in state.input) state.input[dir] = on;
-  }
-
-  // —— Dra i ratten för att styra ——
-  const wheelSteer = { dragging: false, lastX: 0 };
-  if (steering) {
-    steering.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      wheelSteer.dragging = true;
-      state.wheelDragging = true;
-      wheelSteer.lastX = e.clientX;
-      try { steering.setPointerCapture(e.pointerId); } catch (_) {}
-    });
-    steering.addEventListener("pointermove", (e) => {
-      if (!wheelSteer.dragging) return;
-      const dx = e.clientX - wheelSteer.lastX;
-      wheelSteer.lastX = e.clientX;
-      state.steer = Math.max(-520, Math.min(520, state.steer + dx * 3.2));
-      state.steerRate = 0;
-    });
-    const endWheel = () => {
-      if (!wheelSteer.dragging) return;
-      wheelSteer.dragging = false;
-      state.wheelDragging = false;
-    };
-    steering.addEventListener("pointerup", endWheel);
-    steering.addEventListener("pointercancel", endWheel);
-    steering.addEventListener("lostpointercapture", endWheel);
   }
 
   driverDoor.addEventListener("click", openDriverDoor);
@@ -3618,36 +2130,6 @@
 
   window.addEventListener("resize", resize);
 
-  // —— 3D-snurr på sportbilen utifrån ——
-  const parkedCar = document.getElementById("parkedCar");
-  const carSpin = { y: -18, x: 8, dragging: false, lastX: 0, lastY: 0 };
-  function applyCarSpin() {
-    app.style.setProperty("--car-spin-y", `${carSpin.y}deg`);
-    app.style.setProperty("--car-spin-x", `${carSpin.x}deg`);
-  }
-  applyCarSpin();
-  if (parkedCar) {
-    parkedCar.addEventListener("pointerdown", (e) => {
-      if (state.inside) return;
-      if (e.target.closest("button, a, .door")) return;
-      carSpin.dragging = true;
-      carSpin.lastX = e.clientX;
-      carSpin.lastY = e.clientY;
-      try { parkedCar.setPointerCapture(e.pointerId); } catch (_) {}
-    });
-    parkedCar.addEventListener("pointermove", (e) => {
-      if (!carSpin.dragging) return;
-      carSpin.y += (e.clientX - carSpin.lastX) * 0.35;
-      carSpin.x = Math.max(-6, Math.min(22, carSpin.x - (e.clientY - carSpin.lastY) * 0.2));
-      carSpin.lastX = e.clientX;
-      carSpin.lastY = e.clientY;
-      applyCarSpin();
-    });
-    const endSpin = () => { carSpin.dragging = false; };
-    parkedCar.addEventListener("pointerup", endSpin);
-    parkedCar.addEventListener("pointercancel", endSpin);
-  }
-
   let last = performance.now();
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -3657,10 +2139,6 @@
       updatePhysics(dt);
       updateUI();
       render();
-    } else if (!carSpin.dragging) {
-      // Långsam auto-rotation när man står utanför
-      carSpin.y += dt * 8;
-      applyCarSpin();
     }
     requestAnimationFrame(loop);
   }
@@ -3688,13 +2166,14 @@
     driveNowBtn.hidden = true;
 
     showCabinControls();
-    beltStation.hidden = true;
+    beltStation.hidden = false;
     keyBtn.hidden = false;
     keyBtn.disabled = false;
     keyBtn.classList.add("guide");
     keyCaption.textContent = "Ta upp";
     keyholeWrap.hidden = false;
     syncGearLabel();
+    updateBeltUI();
     updateKeyholeUI();
     updateExitButton();
     hint.textContent = "Du sitter i bilen. Ta upp nyckeln och sätt den i nyckelhålet.";
@@ -3702,8 +2181,1012 @@
     requestAnimationFrame(resize);
   }
 
+  // —— Bilskärm + mobil (TikTok, YouTube, Bluetooth, Inställningar) ——
+  const phoneScreen = document.getElementById("phoneScreen");
+  const openPhoneBtn = document.getElementById("openPhone");
+  const pickPhoneBtn = document.getElementById("pickPhone");
+  const closePhoneBtn = document.getElementById("closePhone");
+  const phoneHome = document.getElementById("phoneHome");
+  const phoneAppView = document.getElementById("phoneAppView");
+  const phoneAppBody = document.getElementById("phoneAppBody");
+  const phoneBack = document.getElementById("phoneBack");
+  const phoneTitle = document.getElementById("phoneTitle");
+  const phoneClock = document.getElementById("phoneClock");
+  const phoneBtBadge = document.getElementById("phoneBtBadge");
+  const screenTime = document.getElementById("screenTime");
+  const screenBt = document.getElementById("screenBt");
+  const screenHome = document.getElementById("screenHome");
+  const screenApp = document.getElementById("screenApp");
+  const screenAppBody = document.getElementById("screenAppBody");
+  const screenAppTitle = document.getElementById("screenAppTitle");
+  const screenBack = document.getElementById("screenBack");
+  const screenGlass = document.getElementById("screenGlass");
+
+  const mediaState = {
+    phoneOut: false,
+    phoneBtOn: false,
+    carBtOn: true,
+    connected: false,
+    btScanning: false,
+    btPairing: false,
+    btPin: "4821",
+    phoneBattery: 78,
+    volume: 70,
+    brightness: 80,
+    ttIndex: 0,
+    ttLiked: {},
+    ytId: "jfKfPfyJRdk",
+    musicIndex: 0,
+    musicPlaying: false,
+    radioIndex: 0,
+    radioOn: false,
+    googleQ: "",
+    snapFacing: "user",
+    snapStream: null,
+    snapPhoto: null,
+  };
+
+  const YT_PRESETS = [
+    { id: "jfKfPfyJRdk", title: "Lofi beats — live" },
+    { id: "5qap5aO4i9A", title: "Chill hop radio" },
+    { id: "DWcJFNf70Ic", title: "Night drive mix" },
+    { id: "4xDzrJKXOOY", title: "Synthwave radio" },
+  ];
+
+  const MUSIC_TRACKS = [
+    { title: "Night Drive", artist: "Nermin Beats", emoji: "🌙", id: "jfKfPfyJRdk" },
+    { title: "Asphalt Dreams", artist: "Garage Mix", emoji: "🏎️", id: "5qap5aO4i9A" },
+    { title: "Redline", artist: "Sportläge", emoji: "🔥", id: "4xDzrJKXOOY" },
+    { title: "City Lights", artist: "Highway FM", emoji: "🌃", id: "DWcJFNf70Ic" },
+  ];
+
+  const RADIO_STATIONS = [
+    { name: "P3 Väg", freq: "99.3", id: "jfKfPfyJRdk", vibe: "Pop & hits" },
+    { name: "Nermin FM", freq: "102.7", id: "5qap5aO4i9A", vibe: "Chill hop" },
+    { name: "Sport Radio", freq: "105.1", id: "4xDzrJKXOOY", vibe: "Synthwave" },
+    { name: "Night Cruise", freq: "88.9", id: "DWcJFNf70Ic", vibe: "Night drive" },
+  ];
+
+  // YouTube-klipp (fungerar) + lokal fallback-video om iframe blockeras
+  const TIKTOK_CLIPS = [
+    {
+      user: "@nermin_drives",
+      cap: "När 1:an går sönder vid 75 km/h 💀 #bil #pov",
+      music: "♪ Engine Fail — Nermin Beats",
+      likes: "12.4K",
+      comments: "842",
+      shares: "1.1K",
+      yt: "aqz-KE-bpKQ",
+      src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    },
+    {
+      user: "@asphalt_kid",
+      cap: "POV: du glömde bilbältet 😬 #körning",
+      music: "♪ Seatbelt Check — RoadTape",
+      likes: "48.2K",
+      comments: "3.2K",
+      shares: "9.4K",
+      yt: "ScMzIvxBSi4",
+      src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm",
+    },
+    {
+      user: "@sportlage",
+      cap: "W W W — sedan E till 6:an 🔥 #sportläge",
+      music: "♪ Redline — GarageMix",
+      likes: "91K",
+      comments: "5.6K",
+      shares: "22K",
+      yt: "dQw4w9WgXcQ",
+      src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    },
+    {
+      user: "@night_highway",
+      cap: "Midnattsrace på E4 🌙 #nightdrive",
+      music: "♪ Midnight Cruise — Lofi Road",
+      likes: "33.1K",
+      comments: "1.9K",
+      shares: "4.2K",
+      yt: "lXKb8nTywMw",
+      src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    },
+    {
+      user: "@byt_motor",
+      cap: "Byt motor på 8 sekunder 🛠️ #mekaniker",
+      music: "♪ Workshop — ToolKit",
+      likes: "67K",
+      comments: "4.1K",
+      shares: "11K",
+      yt: "M7lc1UVf-VE",
+      src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    },
+  ];
+
+  const BT_NEARBY = [
+    { id: "car", name: "Nermin Sportbil", type: "Bilstereo", sig: "▂▄▆█", primary: true },
+    { id: "buds", name: "AirPods Pro", type: "Hörlurar", sig: "▂▄▆░" },
+    { id: "watch", name: "Galaxy Watch", type: "Klocka", sig: "▂▄░░" },
+    { id: "speaker", name: "JBL Flip 6", type: "Högtalare", sig: "▂░░░" },
+  ];
+
+  const GOOGLE_SUGGEST = [
+    "väder stockholm",
+    "kortaste vägen till ica",
+    "hur byter man bilmotor",
+    "tiktok bil trends",
+    "nermin bilspel",
+  ];
+
+  const SNAP_FRIENDS = [
+    { name: "Alex", av: "🏎️" },
+    { name: "Mia", av: "😎" },
+    { name: "Kim", av: "🎧" },
+    { name: "Sam", av: "🔥" },
+    { name: "Add", av: "+" },
+  ];
+
+  function tickClocks() {
+    const d = new Date();
+    const t = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    if (phoneClock) phoneClock.textContent = t;
+    if (screenTime) screenTime.textContent = t;
+  }
+
+  function syncBtUi() {
+    if (screenBt) {
+      screenBt.textContent = mediaState.connected ? "BT mobil" : mediaState.carBtOn ? "BT på" : "BT av";
+      screenBt.classList.toggle("on", mediaState.connected || mediaState.carBtOn);
+    }
+    if (phoneBtBadge) {
+      phoneBtBadge.textContent = mediaState.connected ? "BT bil" : mediaState.phoneBtOn ? "BT på" : "BT av";
+      phoneBtBadge.classList.toggle("on", mediaState.connected || mediaState.phoneBtOn);
+    }
+    if (pickPhoneBtn) {
+      pickPhoneBtn.classList.toggle("on", mediaState.phoneOut);
+      pickPhoneBtn.textContent = mediaState.phoneOut ? "Mobil uppe" : "Ta upp mobil";
+    }
+    if (screenGlass) screenGlass.style.filter = `brightness(${0.55 + mediaState.brightness / 200})`;
+  }
+
+  function playTone(freq = 440, dur = 0.15) {
+    ensureAudio();
+    if (!audio.ctx) return;
+    audio.ctx.resume();
+    const o = audio.ctx.createOscillator();
+    const g = audio.ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = freq;
+    o.connect(g);
+    g.connect(audio.sfx || audio.ctx.destination);
+    const t = audio.ctx.currentTime;
+    g.gain.setValueAtTime(0.08, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+
+  function connectPhoneToCar(opts = {}) {
+    const { silent = false, skipPair = false } = opts;
+    if (!mediaState.phoneOut) {
+      if (!silent) toast("Ta upp mobilen först!");
+      return false;
+    }
+    if (!mediaState.phoneBtOn) {
+      if (!silent) toast("Slå på Bluetooth på mobilen först!");
+      return false;
+    }
+    if (!mediaState.carBtOn) {
+      if (!silent) toast("Slå på Bluetooth i bilen först!");
+      return false;
+    }
+    if (mediaState.connected) return true;
+
+    if (!skipPair && !mediaState.btPairing) {
+      mediaState.btPairing = true;
+      mediaState.btPin = String(1000 + Math.floor(Math.random() * 9000));
+      playTone(520, 0.1);
+      if (!silent) toast("Bekräfta PIN på båda enheterna…", 2000);
+      return "pairing";
+    }
+
+    mediaState.btPairing = false;
+    mediaState.btScanning = false;
+    mediaState.connected = true;
+    syncBtUi();
+    playTone(720, 0.18);
+    playTone(880, 0.12);
+    if (!silent) {
+      toast("Ansluten: Media + samtal via Bluetooth", 2800);
+      hint.textContent = "Bluetooth ansluten — TikTok, YouTube, Snapchat & Google på bilskärmen.";
+    }
+    return true;
+  }
+
+  function confirmBtPair() {
+    mediaState.btPairing = false;
+    return connectPhoneToCar({ skipPair: true });
+  }
+
+  function cancelBtPair() {
+    mediaState.btPairing = false;
+    toast("Parkoppling avbruten", 1200);
+  }
+
+  function disconnectBt() {
+    mediaState.connected = false;
+    mediaState.btPairing = false;
+    mediaState.btScanning = false;
+    syncBtUi();
+    toast("Bluetooth frånkopplad", 1400);
+  }
+
+  function startBtScan(onDone) {
+    if (!mediaState.phoneBtOn && !mediaState.carBtOn) {
+      toast("Slå på Bluetooth först");
+      return;
+    }
+    mediaState.btScanning = true;
+    playTone(400, 0.08);
+    setTimeout(() => {
+      mediaState.btScanning = false;
+      onDone?.();
+    }, 1600);
+  }
+
+  function stopSnapCamera() {
+    if (mediaState.snapStream) {
+      mediaState.snapStream.getTracks().forEach((t) => t.stop());
+      mediaState.snapStream = null;
+    }
+  }
+
+  function showPhoneHome() {
+    if (!phoneHome) return;
+    stopSnapCamera();
+    phoneHome.hidden = false;
+    phoneAppView.hidden = true;
+    phoneTitle.textContent = "Din mobil";
+    phoneAppBody.innerHTML = "";
+  }
+
+  function openPhone() {
+    if (!phoneScreen) return;
+    mediaState.phoneOut = true;
+    tickClocks();
+    showPhoneHome();
+    phoneScreen.hidden = false;
+    syncBtUi();
+    toast("Du håller mobilen. Öppna Bluetooth och anslut till bilen.");
+  }
+
+  function closePhone() {
+    if (!phoneScreen) return;
+    stopSnapCamera();
+    phoneScreen.hidden = true;
+    showPhoneHome();
+    syncBtUi();
+  }
+
+  function putPhoneAway() {
+    if (mediaState.connected) disconnectBt();
+    mediaState.phoneOut = false;
+    closePhone();
+    syncBtUi();
+    toast("Mobilen ligger undan.");
+  }
+
+  function ytEmbedHtml(videoId, tall = false, autoplay = false) {
+    const h = tall ? "max-height:220px;aspect-ratio:16/9" : "";
+    const ap = autoplay ? "&autoplay=1&mute=1" : "";
+    return `<div class="yt-embed" style="${h}"><iframe src="https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1${ap}" title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+  }
+
+  function tiktokHtml(forPhone = false) {
+    const i = mediaState.ttIndex % TIKTOK_CLIPS.length;
+    const clip = TIKTOK_CLIPS[i];
+    const liked = !!mediaState.ttLiked[i];
+    const ytSrc = `https://www.youtube-nocookie.com/embed/${clip.yt}?rel=0&modestbranding=1&autoplay=1&mute=1&playsinline=1&loop=1&playlist=${clip.yt}`;
+    return `
+      <div class="tt-feed${forPhone ? "" : " car"}" id="ttFeed">
+        <div class="tt-fallback">Laddar klipp…</div>
+        <iframe id="ttFrame" src="${ytSrc}" title="TikTok" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        <video id="ttVideo" src="${clip.src}" muted loop playsinline hidden></video>
+        <div class="tt-side">
+          <button type="button" id="ttLike"><span class="tt-ico">${liked ? "❤" : "♡"}</span>${liked ? "Dig" : clip.likes}</button>
+          <button type="button" id="ttComment"><span class="tt-ico">💬</span>${clip.comments}</button>
+          <button type="button" id="ttShare"><span class="tt-ico">↗</span>${clip.shares}</button>
+        </div>
+        <div class="tt-overlay">
+          <p class="tt-user">${clip.user}</p>
+          <p class="tt-cap">${clip.cap}</p>
+          <p class="tt-music">${clip.music}</p>
+        </div>
+      </div>
+      <div class="tt-actions">
+        <button type="button" class="phone-action" id="ttPlay">Spela / ljud</button>
+        <button type="button" class="phone-action" id="ttNext">Nästa</button>
+        <button type="button" class="phone-action secondary" id="ttPrev">Förra</button>
+      </div>`;
+  }
+
+  function wireTikTok(root, reopen) {
+    const frame = root.querySelector("#ttFrame");
+    const video = root.querySelector("#ttVideo");
+    const fallback = root.querySelector(".tt-fallback");
+
+    const showVideoFallback = () => {
+      if (!video) return;
+      if (frame) frame.hidden = true;
+      video.hidden = false;
+      video.muted = true;
+      video.play?.().catch(() => {});
+      if (fallback) fallback.textContent = "Video";
+    };
+
+    // Om YouTube inte syns efter en stund → visa MP4-fallback
+    setTimeout(() => {
+      if (!root.isConnected) return;
+      if (frame && !frame.hidden) {
+        // iframe finns — dölj "Laddar"
+        if (fallback) fallback.style.display = "none";
+      }
+    }, 900);
+
+    frame?.addEventListener("error", showVideoFallback);
+    video?.addEventListener("loadeddata", () => {
+      if (fallback) fallback.style.display = "none";
+    });
+    video?.addEventListener("error", () => {
+      if (fallback) fallback.textContent = "Tryck Spela";
+    });
+
+    root.querySelector("#ttPlay")?.addEventListener("click", () => {
+      if (frame && !frame.hidden) {
+        // Byt till video med ljud (användar-gest)
+        showVideoFallback();
+        if (video) {
+          video.muted = false;
+          video.play?.().catch(() => showVideoFallback());
+        }
+        toast("Spelar klipp", 1000);
+        return;
+      }
+      if (video) {
+        video.muted = !video.muted;
+        video.play?.().catch(() => {});
+        toast(video.muted ? "Tyst" : "Ljud på", 900);
+      }
+    });
+
+    root.querySelector("#ttNext")?.addEventListener("click", () => {
+      mediaState.ttIndex = (mediaState.ttIndex + 1) % TIKTOK_CLIPS.length;
+      reopen();
+    });
+    root.querySelector("#ttPrev")?.addEventListener("click", () => {
+      mediaState.ttIndex = (mediaState.ttIndex - 1 + TIKTOK_CLIPS.length) % TIKTOK_CLIPS.length;
+      reopen();
+    });
+    root.querySelector("#ttLike")?.addEventListener("click", () => {
+      const i = mediaState.ttIndex % TIKTOK_CLIPS.length;
+      mediaState.ttLiked[i] = !mediaState.ttLiked[i];
+      playTone(mediaState.ttLiked[i] ? 660 : 320, 0.08);
+      reopen();
+    });
+    root.querySelector("#ttComment")?.addEventListener("click", () => toast("Kommentarer — skriv något snart!", 1400));
+    root.querySelector("#ttShare")?.addEventListener("click", () => {
+      playTone(500, 0.1);
+      toast(mediaState.connected ? "Delat till bilskärmen via BT" : "Delat med vänner", 1600);
+    });
+  }
+
+  function musicHtml() {
+    const t = MUSIC_TRACKS[mediaState.musicIndex % MUSIC_TRACKS.length];
+    return `
+      <div class="music-now">
+        <div class="music-art">${t.emoji}</div>
+        <h3>${t.title}</h3>
+        <p class="artist">${t.artist}</p>
+        ${mediaState.musicPlaying ? ytEmbedHtml(t.id, true, true) : ""}
+        <div class="music-controls">
+          <button type="button" class="phone-action secondary" id="musicPrev">⏮</button>
+          <button type="button" class="phone-action" id="musicPlay">${mediaState.musicPlaying ? "Pausa" : "Spela"}</button>
+          <button type="button" class="phone-action secondary" id="musicNext">⏭</button>
+        </div>
+      </div>
+      <div class="phone-list" id="musicList"></div>`;
+  }
+
+  function wireMusic(root, reopen) {
+    root.querySelector("#musicPlay")?.addEventListener("click", () => {
+      mediaState.musicPlaying = !mediaState.musicPlaying;
+      if (mediaState.musicPlaying) mediaState.radioOn = false;
+      playTone(mediaState.musicPlaying ? 520 : 300, 0.1);
+      reopen();
+    });
+    root.querySelector("#musicPrev")?.addEventListener("click", () => {
+      mediaState.musicIndex = (mediaState.musicIndex - 1 + MUSIC_TRACKS.length) % MUSIC_TRACKS.length;
+      mediaState.musicPlaying = true;
+      mediaState.radioOn = false;
+      reopen();
+    });
+    root.querySelector("#musicNext")?.addEventListener("click", () => {
+      mediaState.musicIndex = (mediaState.musicIndex + 1) % MUSIC_TRACKS.length;
+      mediaState.musicPlaying = true;
+      mediaState.radioOn = false;
+      reopen();
+    });
+    const list = root.querySelector("#musicList");
+    MUSIC_TRACKS.forEach((track, idx) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "phone-row" + (idx === mediaState.musicIndex ? " on" : "");
+      b.innerHTML = `<span>${track.emoji} ${track.title}</span><span class="meta">${track.artist}</span>`;
+      b.addEventListener("click", () => {
+        mediaState.musicIndex = idx;
+        mediaState.musicPlaying = true;
+        mediaState.radioOn = false;
+        reopen();
+      });
+      list?.appendChild(b);
+    });
+  }
+
+  function radioHtml() {
+    const s = RADIO_STATIONS[mediaState.radioIndex % RADIO_STATIONS.length];
+    return `
+      <div class="radio-dial">
+        <div class="radio-freq">${s.freq} FM</div>
+        <div class="radio-wave${mediaState.radioOn ? " on" : ""}"></div>
+        <strong>${s.name}</strong>
+        <p style="margin:.25rem 0 0;opacity:.7;font-size:.75rem">${s.vibe}</p>
+        ${mediaState.radioOn ? ytEmbedHtml(s.id, true, true) : ""}
+        <button type="button" class="phone-action" id="radioToggle" style="margin-top:.55rem">${mediaState.radioOn ? "Stäng av" : "Slå på radio"}</button>
+      </div>
+      <div class="phone-list" id="radioList"></div>`;
+  }
+
+  function wireRadio(root, reopen) {
+    root.querySelector("#radioToggle")?.addEventListener("click", () => {
+      mediaState.radioOn = !mediaState.radioOn;
+      if (mediaState.radioOn) mediaState.musicPlaying = false;
+      playTone(mediaState.radioOn ? 440 : 280, 0.12);
+      toast(mediaState.radioOn ? `Lyssnar på ${RADIO_STATIONS[mediaState.radioIndex].name}` : "Radio av", 1400);
+      reopen();
+    });
+    const list = root.querySelector("#radioList");
+    RADIO_STATIONS.forEach((st, idx) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "phone-row" + (idx === mediaState.radioIndex ? " on" : "");
+      b.innerHTML = `<span>${st.freq} · ${st.name}</span><span class="meta">${st.vibe}</span>`;
+      b.addEventListener("click", () => {
+        mediaState.radioIndex = idx;
+        mediaState.radioOn = true;
+        mediaState.musicPlaying = false;
+        reopen();
+      });
+      list?.appendChild(b);
+    });
+  }
+
+  function googleHtml(compact = false) {
+    const q = mediaState.googleQ;
+    const results = q
+      ? [
+          { title: `${q} — Wikipedia`, url: `sv.wikipedia.org/wiki/${encodeURIComponent(q)}`, snip: `Läs mer om ${q}. Öppna i webbläsaren.` },
+          { title: `Kartor: ${q}`, url: `maps.google.com/search/${encodeURIComponent(q)}`, snip: "Hitta vägbeskrivning och trafik." },
+          { title: `YouTube: ${q}`, url: `youtube.com/results?search_query=${encodeURIComponent(q)}`, snip: "Videor och livesändningar." },
+        ]
+      : [];
+    return `
+      <div class="g-search">
+        <div class="g-logo"><span class="b">G</span><span class="r">o</span><span class="y">o</span><span class="b">g</span><span class="g2">l</span><span class="r">e</span></div>
+        <div class="g-bar">
+          <input id="gInput" type="search" placeholder="Sök på Google" value="${q.replace(/"/g, "&quot;")}" autocomplete="off" />
+          <button type="button" id="gGo">Sök</button>
+        </div>
+        <div class="g-btns">
+          <button type="button" class="g-btn" id="gLucky">Jag har tur</button>
+        </div>
+        ${
+          q
+            ? `<div id="gResults">${results
+                .map(
+                  (r) => `<div class="g-result"><a href="https://${r.url}" target="_blank" rel="noopener">${r.title}</a><div class="url">${r.url}</div><p>${r.snip}</p></div>`
+                )
+                .join("")}</div>`
+            : `<div class="g-suggest">${GOOGLE_SUGGEST.map((s) => `<button type="button" data-gq="${s}">🔍 ${s}</button>`).join("")}</div>`
+        }
+        ${compact ? "" : `<p style="margin:.6rem 0 0;font-size:.7rem;color:#70757a;text-align:center">Sökningar öppnas i ny flik</p>`}
+      </div>`;
+  }
+
+  function wireGoogle(root, reopen) {
+    const run = (q) => {
+      mediaState.googleQ = (q || root.querySelector("#gInput")?.value || "").trim();
+      if (!mediaState.googleQ) return;
+      playTone(480, 0.08);
+      reopen();
+    };
+    root.querySelector("#gGo")?.addEventListener("click", () => run());
+    root.querySelector("#gLucky")?.addEventListener("click", () => {
+      mediaState.googleQ = GOOGLE_SUGGEST[Math.floor(Math.random() * GOOGLE_SUGGEST.length)];
+      reopen();
+    });
+    root.querySelector("#gInput")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") run();
+    });
+    root.querySelectorAll("[data-gq]").forEach((b) => {
+      b.addEventListener("click", () => run(b.dataset.gq));
+    });
+  }
+
+  function snapHtml(forPhone = true) {
+    return `
+      <div class="snap-app">
+        <div class="snap-stories" id="snapStories">
+          ${SNAP_FRIENDS.map((f) => `<button type="button" class="snap-story" data-friend="${f.name}"><div class="av">${f.av}</div>${f.name}</button>`).join("")}
+        </div>
+        <div class="snap-cam">
+          <div class="snap-top"><span>Snapchat</span><span id="snapHint">Kamera</span></div>
+          <video id="snapVideo" autoplay muted playsinline ${mediaState.snapPhoto ? "hidden" : ""}></video>
+          <img id="snapPreview" alt="Snap" ${mediaState.snapPhoto ? `src="${mediaState.snapPhoto}"` : "hidden"} />
+          <button type="button" class="snap-shutter" id="snapShutter" aria-label="Ta snap"><span></span></button>
+        </div>
+        <div class="snap-bar">
+          <button type="button" class="phone-action" id="snapFlip">Byt kamera</button>
+          <button type="button" class="phone-action secondary" id="snapSend"${mediaState.snapPhoto ? "" : " disabled"}>Skicka</button>
+          ${forPhone ? "" : ""}
+        </div>
+      </div>`;
+  }
+
+  async function startSnapCamera(root) {
+    stopSnapCamera();
+    const video = root.querySelector("#snapVideo");
+    const preview = root.querySelector("#snapPreview");
+    if (mediaState.snapPhoto && preview) {
+      preview.hidden = false;
+      if (video) video.hidden = true;
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      root.querySelector("#snapHint").textContent = "Ingen kamera";
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: mediaState.snapFacing },
+        audio: false,
+      });
+      mediaState.snapStream = stream;
+      if (video) {
+        video.srcObject = stream;
+        video.hidden = false;
+        video.play?.().catch(() => {});
+      }
+      if (preview) preview.hidden = true;
+      root.querySelector("#snapHint").textContent = "Live";
+    } catch {
+      root.querySelector("#snapHint").textContent = "Tillåt kamera";
+      toast("Tillåt kamera för Snapchat", 2000);
+    }
+  }
+
+  function wireSnap(root, reopen) {
+    startSnapCamera(root);
+    root.querySelector("#snapShutter")?.addEventListener("click", () => {
+      const video = root.querySelector("#snapVideo");
+      if (mediaState.snapPhoto) {
+        mediaState.snapPhoto = null;
+        reopen();
+        return;
+      }
+      if (!video || video.hidden || !video.videoWidth) {
+        toast("Vänta på kameran…", 1200);
+        return;
+      }
+      const c = document.createElement("canvas");
+      c.width = video.videoWidth;
+      c.height = video.videoHeight;
+      c.getContext("2d").drawImage(video, 0, 0);
+      mediaState.snapPhoto = c.toDataURL("image/jpeg", 0.85);
+      stopSnapCamera();
+      playTone(700, 0.06);
+      reopen();
+    });
+    root.querySelector("#snapFlip")?.addEventListener("click", () => {
+      mediaState.snapFacing = mediaState.snapFacing === "user" ? "environment" : "user";
+      mediaState.snapPhoto = null;
+      reopen();
+    });
+    root.querySelector("#snapSend")?.addEventListener("click", () => {
+      if (!mediaState.snapPhoto) return;
+      playTone(640, 0.12);
+      toast(mediaState.connected ? "Snap skickad till bilskärmen!" : "Snap skickad till vänner!", 1800);
+      mediaState.snapPhoto = null;
+      reopen();
+    });
+    root.querySelectorAll("[data-friend]").forEach((b) => {
+      b.addEventListener("click", () => toast(`Öppnar story: ${b.dataset.friend}`, 1200));
+    });
+  }
+
+  function btHtml(scope) {
+    const isPhone = scope === "phone";
+    const on = isPhone ? mediaState.phoneBtOn : mediaState.carBtOn;
+    const orbClass = mediaState.connected ? "connected" : mediaState.btScanning || mediaState.btPairing ? "scanning" : "";
+    if (mediaState.btPairing) {
+      return `
+        <div class="bt-panel">
+          <div class="bt-pair">
+            <p>Parkopplar med Nermin Sportbil</p>
+            <div class="pin">${mediaState.btPin}</div>
+            <p style="opacity:.7;font-size:.8rem">Bekräfta att PIN stämmer på båda enheter</p>
+            <button type="button" class="phone-action" id="btConfirm">Parkoppla</button>
+            <button type="button" class="phone-action secondary" id="btCancel" style="margin-top:.35rem">Avbryt</button>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="bt-panel">
+        <div class="bt-status">
+          <div class="bt-orb ${orbClass}">BT</div>
+          <div>
+            <strong>${on ? (mediaState.connected ? "Ansluten" : mediaState.btScanning ? "Söker…" : "På") : "Av"}</strong>
+            <div style="font-size:.72rem;opacity:.7">${
+              mediaState.connected
+                ? isPhone
+                  ? `Nermin Sportbil · Media · Batteri ${mediaState.phoneBattery}%`
+                  : `Din mobil · Media + samtal · ${mediaState.phoneBattery}%`
+                : isPhone
+                  ? "Hitta bilstereo i närheten"
+                  : mediaState.phoneOut
+                    ? "Mobil synlig"
+                    : "Ingen mobil uppe"
+            }</div>
+          </div>
+        </div>
+        ${
+          mediaState.connected
+            ? `<div class="bt-profiles">
+                <span class="bt-chip on">Media-ljud</span>
+                <span class="bt-chip on">Telefonsamtal</span>
+                <span class="bt-chip on">A2DP</span>
+                <span class="bt-chip">HFP</span>
+              </div>`
+            : ""
+        }
+        <button type="button" class="phone-action" id="btPower" style="margin-top:.55rem">${on ? "Stäng av Bluetooth" : "Slå på Bluetooth"}</button>
+        ${on && !mediaState.connected ? `<button type="button" class="phone-action secondary" id="btScan" style="margin-top:.3rem">${mediaState.btScanning ? "Söker…" : "Sök enheter"}</button>` : ""}
+        ${mediaState.connected ? `<button type="button" class="phone-action secondary" id="btDisc" style="margin-top:.3rem">Koppla från</button>` : ""}
+        <div style="margin-top:.55rem" id="btList">
+          ${
+            on
+              ? BT_NEARBY.filter((d) => (isPhone ? true : d.primary || mediaState.phoneOut)).map(
+                  (d) => `
+            <button type="button" class="bt-device${mediaState.connected && d.primary ? " on" : ""}" data-bt="${d.id}">
+              <span class="sig">${d.sig}</span>
+              <span class="info"><span class="name">${d.name}</span><span class="sub">${d.type}${mediaState.connected && d.primary ? " · Ansluten" : ""}</span></span>
+            </button>`
+                ).join("")
+              : `<p style="opacity:.65;font-size:.8rem">Slå på Bluetooth för att se enheter</p>`
+          }
+        </div>
+      </div>`;
+  }
+
+  function wireBt(root, scope, reopen) {
+    const isPhone = scope === "phone";
+    root.querySelector("#btPower")?.addEventListener("click", () => {
+      if (isPhone) {
+        mediaState.phoneBtOn = !mediaState.phoneBtOn;
+        if (!mediaState.phoneBtOn) {
+          mediaState.connected = false;
+          mediaState.btPairing = false;
+        }
+      } else {
+        mediaState.carBtOn = !mediaState.carBtOn;
+        if (!mediaState.carBtOn) {
+          mediaState.connected = false;
+          mediaState.btPairing = false;
+        }
+      }
+      syncBtUi();
+      playTone((isPhone ? mediaState.phoneBtOn : mediaState.carBtOn) ? 600 : 280, 0.12);
+      reopen();
+    });
+    root.querySelector("#btScan")?.addEventListener("click", () => {
+      startBtScan(reopen);
+      reopen();
+    });
+    root.querySelector("#btDisc")?.addEventListener("click", () => {
+      disconnectBt();
+      reopen();
+    });
+    root.querySelector("#btConfirm")?.addEventListener("click", () => {
+      confirmBtPair();
+      reopen();
+    });
+    root.querySelector("#btCancel")?.addEventListener("click", () => {
+      cancelBtPair();
+      reopen();
+    });
+    root.querySelectorAll("[data-bt]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.bt;
+        if (id !== "car") {
+          toast("Anslut till Nermin Sportbil för bilappar", 1600);
+          return;
+        }
+        if (mediaState.connected) {
+          disconnectBt();
+          reopen();
+          return;
+        }
+        if (!isPhone && !mediaState.phoneOut) {
+          openPhone();
+          toast("Ta upp mobilen och slå på BT", 2000);
+        }
+        if (!isPhone && mediaState.phoneOut && !mediaState.phoneBtOn) {
+          mediaState.phoneBtOn = true;
+          syncBtUi();
+        }
+        const r = connectPhoneToCar();
+        reopen();
+        if (r === "pairing") {
+          /* pairing UI shown */
+        }
+      });
+    });
+  }
+
+  function settingsHtml() {
+    return `
+      <div class="phone-panel">
+        <p>Volym: <strong id="volVal">${mediaState.volume}</strong></p>
+        <input type="range" id="volRange" min="0" max="100" value="${mediaState.volume}" />
+        <p style="margin-top:.5rem">Ljusstyrka: <strong id="briVal">${mediaState.brightness}</strong></p>
+        <input type="range" id="briRange" min="20" max="100" value="${mediaState.brightness}" />
+        <p style="margin-top:.5rem">Bluetooth bil: ${mediaState.carBtOn ? "På" : "Av"}</p>
+        <button type="button" class="phone-action" id="carBtToggle">${mediaState.carBtOn ? "Stäng av BT" : "Slå på BT"}</button>
+        <p style="margin-top:.4rem;opacity:.75">${mediaState.connected ? "Ansluten till Din mobil · A2DP + HFP" : "Ingen mobil ansluten"}</p>
+      </div>`;
+  }
+
+  function wireSettings(root, reopen) {
+    root.querySelector("#volRange")?.addEventListener("input", (e) => {
+      mediaState.volume = Number(e.target.value);
+      root.querySelector("#volVal").textContent = String(mediaState.volume);
+      if (audio.master && audio.ctx) {
+        audio.master.gain.setTargetAtTime(mediaState.volume / 1000, audio.ctx.currentTime, 0.05);
+      }
+    });
+    root.querySelector("#briRange")?.addEventListener("input", (e) => {
+      mediaState.brightness = Number(e.target.value);
+      root.querySelector("#briVal").textContent = String(mediaState.brightness);
+      syncBtUi();
+    });
+    root.querySelector("#carBtToggle")?.addEventListener("click", () => {
+      mediaState.carBtOn = !mediaState.carBtOn;
+      if (!mediaState.carBtOn) mediaState.connected = false;
+      syncBtUi();
+      playTone(mediaState.carBtOn ? 600 : 280, 0.12);
+      reopen();
+    });
+  }
+
+  function needBtGate(body, reopenLabel) {
+    body.innerHTML = `
+      <p>Anslut mobilen via Bluetooth först för ${reopenLabel}.</p>
+      <button type="button" class="phone-action" id="needPhone">Ta upp mobil</button>
+      <button type="button" class="phone-action secondary" id="needBt" style="margin-top:.3rem">Öppna Bluetooth</button>`;
+    body.querySelector("#needPhone")?.addEventListener("click", openPhone);
+    body.querySelector("#needBt")?.addEventListener("click", () => openCarApp("bluetooth"));
+  }
+
+  function renderPhoneApp(name) {
+    const titles = {
+      bluetooth: "Bluetooth",
+      tiktok: "TikTok",
+      youtube: "YouTube",
+      musik: "Musik",
+      radio: "Radio",
+      google: "Google",
+      snapchat: "Snapchat",
+      settings: "Inställningar",
+    };
+    phoneTitle.textContent = titles[name] || "App";
+    phoneHome.hidden = true;
+    phoneAppView.hidden = false;
+    stopSnapCamera();
+
+    if (name === "bluetooth") {
+      phoneAppBody.innerHTML = btHtml("phone");
+      wireBt(phoneAppBody, "phone", () => renderPhoneApp("bluetooth"));
+      return;
+    }
+
+    if (name === "tiktok") {
+      phoneAppBody.innerHTML = `<div class="phone-panel" style="padding:0">${tiktokHtml(true)}</div>`;
+      wireTikTok(phoneAppBody, () => renderPhoneApp("tiktok"));
+      return;
+    }
+
+    if (name === "youtube") {
+      phoneAppBody.innerHTML = `
+        <div class="phone-panel">
+          ${ytEmbedHtml(mediaState.ytId, true)}
+          <div class="phone-list" id="ytList" style="margin-top:.5rem"></div>
+        </div>`;
+      const list = phoneAppBody.querySelector("#ytList");
+      YT_PRESETS.forEach((v) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "phone-row" + (v.id === mediaState.ytId ? " on" : "");
+        b.innerHTML = `<span>${v.title}</span><span class="meta">Spela</span>`;
+        b.addEventListener("click", () => {
+          mediaState.ytId = v.id;
+          renderPhoneApp("youtube");
+        });
+        list.appendChild(b);
+      });
+      return;
+    }
+
+    if (name === "musik") {
+      phoneAppBody.innerHTML = `<div class="phone-panel">${musicHtml()}</div>`;
+      wireMusic(phoneAppBody, () => renderPhoneApp("musik"));
+      return;
+    }
+
+    if (name === "radio") {
+      phoneAppBody.innerHTML = `<div class="phone-panel">${radioHtml()}</div>`;
+      wireRadio(phoneAppBody, () => renderPhoneApp("radio"));
+      return;
+    }
+
+    if (name === "google") {
+      phoneAppBody.innerHTML = googleHtml(false);
+      wireGoogle(phoneAppBody, () => renderPhoneApp("google"));
+      return;
+    }
+
+    if (name === "snapchat") {
+      phoneAppBody.innerHTML = snapHtml(true);
+      wireSnap(phoneAppBody, () => renderPhoneApp("snapchat"));
+      return;
+    }
+
+    if (name === "settings") {
+      phoneAppBody.innerHTML = settingsHtml();
+      wireSettings(phoneAppBody, () => renderPhoneApp("settings"));
+    }
+  }
+
+  function showCarHome() {
+    if (!screenHome) return;
+    stopSnapCamera();
+    screenHome.hidden = false;
+    screenApp.hidden = true;
+    screenAppBody.innerHTML = "";
+  }
+
+  function openCarApp(name) {
+    if (!screenApp) return;
+    const titles = {
+      tiktok: "TikTok",
+      youtube: "YouTube",
+      musik: "Musik",
+      radio: "Radio",
+      google: "Google",
+      snapchat: "Snapchat",
+      bluetooth: "Bluetooth",
+      settings: "Inställningar",
+    };
+    screenAppTitle.textContent = titles[name] || "App";
+    screenHome.hidden = true;
+    screenApp.hidden = false;
+    stopSnapCamera();
+
+    if (name === "tiktok") {
+      if (!mediaState.connected) {
+        needBtGate(screenAppBody, "TikTok");
+        return;
+      }
+      screenAppBody.innerHTML = tiktokHtml(false);
+      wireTikTok(screenAppBody, () => openCarApp("tiktok"));
+      return;
+    }
+
+    if (name === "youtube") {
+      screenAppBody.innerHTML = `
+        ${ytEmbedHtml(mediaState.ytId, false)}
+        <div class="phone-list" id="carYt" style="margin-top:.3rem"></div>`;
+      const list = screenAppBody.querySelector("#carYt");
+      YT_PRESETS.forEach((v) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "phone-row" + (v.id === mediaState.ytId ? " on" : "");
+        b.innerHTML = `<span>${v.title}</span><span class="meta">▶</span>`;
+        b.addEventListener("click", () => {
+          mediaState.ytId = v.id;
+          openCarApp("youtube");
+        });
+        list.appendChild(b);
+      });
+      return;
+    }
+
+    if (name === "musik") {
+      screenAppBody.innerHTML = musicHtml();
+      wireMusic(screenAppBody, () => openCarApp("musik"));
+      return;
+    }
+
+    if (name === "radio") {
+      screenAppBody.innerHTML = radioHtml();
+      wireRadio(screenAppBody, () => openCarApp("radio"));
+      return;
+    }
+
+    if (name === "google") {
+      if (!mediaState.connected) {
+        needBtGate(screenAppBody, "Google");
+        return;
+      }
+      screenAppBody.innerHTML = googleHtml(true);
+      wireGoogle(screenAppBody, () => openCarApp("google"));
+      return;
+    }
+
+    if (name === "snapchat") {
+      if (!mediaState.connected) {
+        needBtGate(screenAppBody, "Snapchat");
+        return;
+      }
+      screenAppBody.innerHTML = snapHtml(false);
+      wireSnap(screenAppBody, () => openCarApp("snapchat"));
+      return;
+    }
+
+    if (name === "bluetooth") {
+      screenAppBody.innerHTML = btHtml("car");
+      wireBt(screenAppBody, "car", () => openCarApp("bluetooth"));
+      return;
+    }
+
+    if (name === "settings") {
+      screenAppBody.innerHTML = settingsHtml();
+      wireSettings(screenAppBody, () => openCarApp("settings"));
+    }
+  }
+
+  openPhoneBtn?.addEventListener("click", () => {
+    if (mediaState.phoneOut && !phoneScreen.hidden) closePhone();
+    else openPhone();
+  });
+  pickPhoneBtn?.addEventListener("click", () => {
+    if (mediaState.phoneOut) putPhoneAway();
+    else openPhone();
+  });
+  closePhoneBtn?.addEventListener("click", putPhoneAway);
+  phoneBack?.addEventListener("click", showPhoneHome);
+  phoneScreen?.addEventListener("click", (e) => {
+    if (e.target === phoneScreen) closePhone();
+  });
+  document.querySelectorAll(".phone-app").forEach((btn) => {
+    btn.addEventListener("click", () => renderPhoneApp(btn.dataset.app));
+  });
+  document.querySelectorAll("[data-car-app]").forEach((btn) => {
+    btn.addEventListener("click", () => openCarApp(btn.dataset.carApp));
+  });
+  screenBack?.addEventListener("click", showCarHome);
+  setInterval(tickClocks, 30000);
+  tickClocks();
+  syncBtUi();
+  showCarHome();
+
   beginInside();
   setDriveMode("comfort", false);
-  initCarScreen();
   toast("Du sitter i bilen. Ta upp nyckeln!", 3400);
 })();
