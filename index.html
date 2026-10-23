@@ -7,12 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;700&family=Outfit:wght@700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=7" />
+  <link rel="stylesheet" href="style.css?v=boom1" />
 </head>
 <body>
   <div class="app outside" id="app">
     <div class="hud-top">
-      <button type="button" class="to-phone" id="openPhone" aria-label="Öppna mobil">Mobil</button>
+      <a class="to-ring" href="ring.html">Ring</a>
       <div class="brand">Nermin</div>
       <p class="hint" id="hint">Din sportbil väntar. Öppna förardörren.</p>
     </div>
@@ -76,48 +76,59 @@
     <div class="viewport" id="viewport" hidden>
       <canvas id="view"></canvas>
       <div class="glass" aria-hidden="true"></div>
-      <div class="glass-reflect" aria-hidden="true"></div>
       <div class="side-window left-win" aria-hidden="true"></div>
       <div class="side-window right-win" aria-hidden="true"></div>
       <div class="a-pillar left" aria-hidden="true">
         <span class="pillar-trim"></span>
-        <span class="pillar-grab"></span>
+        <span class="grab-handle"></span>
       </div>
       <div class="a-pillar right" aria-hidden="true">
         <span class="pillar-trim"></span>
       </div>
       <div class="roof-liner" aria-hidden="true">
         <span class="dome-light"></span>
-        <span class="roof-console"></span>
+        <span class="sun-visor left-visor"></span>
+        <span class="sun-visor right-visor"></span>
       </div>
       <div class="window-frame" aria-hidden="true"></div>
       <div class="door-card left-door-card" aria-hidden="true">
+        <span class="door-leather"></span>
         <span class="door-armrest"></span>
         <span class="door-handle-inner"></span>
-        <span class="window-switch"></span>
+        <span class="door-lock-pin"></span>
+        <span class="door-window-switch"></span>
         <span class="door-speaker"></span>
-        <span class="door-pocket"></span>
+        <span class="door-ambient"></span>
       </div>
       <div class="door-card right-door-card" aria-hidden="true">
+        <span class="door-leather"></span>
         <span class="door-armrest"></span>
         <span class="door-handle-inner"></span>
-        <span class="window-switch"></span>
+        <span class="door-lock-pin"></span>
+        <span class="door-window-switch"></span>
         <span class="door-speaker"></span>
-        <span class="door-pocket"></span>
+        <span class="door-ambient"></span>
       </div>
+      <div class="seat-wing left-seat" aria-hidden="true"></div>
+      <div class="seat-wing right-seat" aria-hidden="true"></div>
       <div class="dash-shelf" aria-hidden="true">
-        <span class="defrost-vent"></span>
-        <span class="defrost-vent mid"></span>
-        <span class="defrost-vent right"></span>
-        <span class="dash-badge">NERMIN</span>
+        <span class="dash-carbon"></span>
+        <span class="dash-defrost"></span>
+        <span class="dash-stitch-line"></span>
       </div>
-      <div class="ambient-strip" aria-hidden="true"></div>
       <div class="seatbelt-visual" id="seatbeltVisual" hidden aria-hidden="true">
         <span class="belt-diag"></span>
+        <span class="belt-retractor"></span>
         <span class="belt-lap-bar"></span>
       </div>
       <div class="door-open-overlay" id="doorOverlay" hidden></div>
+      <div class="car-boom" id="carBoom" hidden aria-hidden="true">
+        <div class="boom-flash"></div>
+        <div class="boom-fire"></div>
+        <p class="boom-text">BOOM!</p>
+      </div>
       <div class="mirror center-mirror" aria-hidden="true">
+        <span class="mirror-stem"></span>
         <canvas id="rear" width="200" height="70"></canvas>
       </div>
       <div class="mirror side-mirror left-mirror" aria-hidden="true">
@@ -128,7 +139,7 @@
       </div>
 
       <div class="minimap-wrap" aria-label="Karta">
-        <canvas id="minimap" width="160" height="160"></canvas>
+        <canvas id="minimap" width="200" height="200"></canvas>
         <span class="minimap-label">GPS</span>
       </div>
 
@@ -137,32 +148,28 @@
     </div>
 
     <div class="cockpit sport-cockpit" id="cockpit" hidden>
+      <div class="cabin-ambient" aria-hidden="true"></div>
       <div class="dash-top">
         <span class="dash-vent left"></span>
-        <span class="dash-vent mid-left"></span>
+        <span class="dash-clock" aria-hidden="true"></span>
         <span class="dash-stitch"></span>
-        <span class="dash-vent mid-right"></span>
         <span class="dash-vent right"></span>
+        <span class="dash-chrome"></span>
       </div>
-      <div class="climate-bar" aria-label="Klimat">
-        <span class="clim-btn">❄</span>
-        <span class="clim-temp">21°</span>
-        <div class="clim-fan"><i></i><i></i><i></i></div>
-        <span class="clim-mode">AUTO</span>
-        <span class="clim-btn">♨</span>
+      <div class="console-rail" aria-hidden="true">
+        <span class="console-cup"></span>
+        <span class="console-pad"></span>
+      </div>
+      <div class="pedal-bay" aria-hidden="true">
+        <span class="pedal clutch"></span>
+        <span class="pedal brake"></span>
+        <span class="pedal gas"></span>
       </div>
       <div class="dash-row">
         <div class="cluster fuel-only">
           <div class="dial">
             <svg viewBox="0 0 100 100" class="dial-svg">
               <circle cx="50" cy="50" r="42" class="dial-face" />
-              <g class="dial-ticks" aria-hidden="true">
-                <line x1="50" y1="12" x2="50" y2="18" /><line x1="72" y1="18" x2="69" y2="23" />
-                <line x1="88" y1="38" x2="82" y2="40" /><line x1="88" y1="62" x2="82" y2="60" />
-                <line x1="72" y1="82" x2="69" y2="77" /><line x1="28" y1="82" x2="31" y2="77" />
-                <line x1="12" y1="62" x2="18" y2="60" /><line x1="12" y1="38" x2="18" y2="40" />
-                <line x1="28" y1="18" x2="31" y2="23" />
-              </g>
               <path id="fuelNeedle" d="M50 50 L50 18" class="needle fuel" />
               <circle cx="50" cy="50" r="4" class="dial-hub" />
             </svg>
@@ -173,7 +180,6 @@
             <span class="light-dot" id="engineLight">ENG</span>
             <span class="blinker" id="blinkR">▶</span>
           </div>
-          <div class="cluster-temp">OLJA · OK</div>
         </div>
 
         <div class="wheel-area">
@@ -182,17 +188,10 @@
               <div class="dial compact">
                 <svg viewBox="0 0 100 100" class="dial-svg">
                   <circle cx="50" cy="50" r="42" class="dial-face" />
-                  <g class="dial-ticks" aria-hidden="true">
-                    <line x1="50" y1="10" x2="50" y2="17" /><line x1="74" y1="16" x2="70" y2="22" />
-                    <line x1="90" y1="36" x2="83" y2="39" /><line x1="90" y1="64" x2="83" y2="61" />
-                    <line x1="74" y1="84" x2="70" y2="78" /><line x1="26" y1="84" x2="30" y2="78" />
-                    <line x1="10" y1="64" x2="17" y2="61" /><line x1="10" y1="36" x2="17" y2="39" />
-                    <line x1="26" y1="16" x2="30" y2="22" />
-                  </g>
                   <path id="rpmNeedle" d="M50 50 L50 14" class="needle rpm" />
                   <circle cx="50" cy="50" r="4" class="dial-hub" />
                 </svg>
-                <span>×1000</span>
+                <span>RPM</span>
               </div>
               <div class="speedo compact">
                 <strong id="speed">0</strong>
@@ -205,6 +204,13 @@
             </div>
 
             <div class="steering bmw-wheel" id="steering" aria-label="BMW-ratt">
+              <div class="rim-3d" aria-hidden="true">
+                <span class="rim-back"></span>
+                <span class="rim-side"></span>
+                <span class="rim-front"></span>
+                <span class="rim-grip"></span>
+                <span class="rim-stitch"></span>
+              </div>
               <div class="rim"></div>
               <div class="spoke s-left">
                 <span class="mf-btn"></span>
@@ -216,6 +222,7 @@
               </div>
               <div class="spoke s-bottom"></div>
               <div class="hub">
+                <span class="hub-face"></span>
                 <span class="bmw-roundel" aria-hidden="true">
                   <span class="bmw-ring"></span>
                   <span class="bmw-quad q1"></span>
@@ -289,43 +296,25 @@
               <div class="screen-bar">
                 <span class="screen-time" id="screenTime">12:00</span>
                 <span class="screen-brand">Nermin OS</span>
-                <span class="screen-bt" id="screenBt">BT av</span>
+                <span class="screen-signal" id="screenSignal">●●●</span>
               </div>
+
               <div class="screen-home" id="screenHome">
-                <p class="screen-greeting">Bilskärm</p>
-                <div class="screen-apps" role="list">
-                  <button type="button" class="screen-app-btn" data-car-app="tiktok" role="listitem">
-                    <span class="screen-app-icon tiktok">TT</span><span>TikTok</span>
-                  </button>
-                  <button type="button" class="screen-app-btn" data-car-app="youtube" role="listitem">
-                    <span class="screen-app-icon youtube">▶</span><span>YouTube</span>
-                  </button>
-                  <button type="button" class="screen-app-btn" data-car-app="musik" role="listitem">
-                    <span class="screen-app-icon musik">♪</span><span>Musik</span>
-                  </button>
-                  <button type="button" class="screen-app-btn" data-car-app="radio" role="listitem">
-                    <span class="screen-app-icon radio">FM</span><span>Radio</span>
-                  </button>
-                  <button type="button" class="screen-app-btn" data-car-app="google" role="listitem">
-                    <span class="screen-app-icon google">G</span><span>Google</span>
-                  </button>
-                  <button type="button" class="screen-app-btn" data-car-app="snapchat" role="listitem">
-                    <span class="screen-app-icon snapchat">👻</span><span>Snapchat</span>
-                  </button>
-                  <button type="button" class="screen-app-btn" data-car-app="bluetooth" role="listitem">
-                    <span class="screen-app-icon bluetooth">BT</span><span>Bluetooth</span>
-                  </button>
-                  <button type="button" class="screen-app-btn" data-car-app="settings" role="listitem">
-                    <span class="screen-app-icon settings">⚙</span><span>Inställningar</span>
-                  </button>
-                </div>
+                <p class="screen-greeting">Välj en app</p>
+                <div class="screen-apps" id="screenApps" role="list"></div>
               </div>
+
               <div class="screen-app" id="screenApp" hidden>
                 <div class="screen-app-head">
-                  <button type="button" class="screen-back" id="screenBack">←</button>
+                  <button type="button" class="screen-back" id="screenBack" aria-label="Tillbaka till appar">←</button>
                   <strong id="screenAppTitle">App</strong>
                 </div>
                 <div class="screen-app-body" id="screenAppBody"></div>
+              </div>
+
+              <div class="screen-off" id="screenOff" hidden>
+                <p>Skärm av</p>
+                <button type="button" class="screen-wake" id="screenWake">Slå på</button>
               </div>
             </div>
           </div>
@@ -335,10 +324,11 @@
           <div class="drive-mode" id="driveMode" role="group" aria-label="Körläge">
             <button type="button" class="mode-btn comfort on" id="modeComfort" aria-pressed="true">Komfort</button>
             <button type="button" class="mode-btn sport" id="modeSport" aria-pressed="false">Sport</button>
+            <button type="button" class="mode-btn extreme" id="modeExtreme" aria-pressed="false">Extreme</button>
           </div>
-          <button type="button" class="phone-pick-btn" id="pickPhone">Ta upp mobil</button>
           <button type="button" class="drive-now-btn" id="driveNow" hidden>KÖR NU</button>
           <button type="button" class="repair-btn" id="repairEngine" hidden>Byt motor</button>
+          <button type="button" class="phone-open-btn" id="phoneOpenBtn">Mobil</button>
           <button type="button" class="door-inner-btn" id="innerDoorBtn">Öppna dörr</button>
           <button type="button" class="exit-btn" id="exitCar" hidden>Gå ur bilen</button>
 
@@ -350,6 +340,276 @@
               <span class="buckle-tongue" id="buckleTongue"></span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="yt-overlay" id="ytOverlay" hidden>
+      <div class="yt-panel" role="dialog" aria-modal="true" aria-labelledby="ytTitle">
+        <div class="yt-head">
+          <strong id="ytTitle">YouTube</strong>
+          <button type="button" class="yt-close" id="ytClose" aria-label="Stäng YouTube">✕</button>
+        </div>
+        <div class="yt-player-wrap">
+          <iframe
+            id="ytFrame"
+            title="YouTube"
+            src=""
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"
+          ></iframe>
+          <div class="yt-placeholder" id="ytPlaceholder">
+            <p>Välj en video eller klistra in en YouTube-länk</p>
+          </div>
+        </div>
+        <div class="yt-controls">
+          <div class="yt-presets" id="ytPresets"></div>
+          <form class="yt-form" id="ytForm">
+            <input
+              id="ytInput"
+              class="yt-input"
+              type="url"
+              placeholder="Klistra in YouTube-länk…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="submit" class="yt-go">Spela</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone-overlay" id="phoneOverlay" hidden>
+      <div class="phone-shell" role="dialog" aria-modal="true" aria-label="Mobil">
+        <div class="phone-notch" aria-hidden="true"></div>
+        <div class="phone-display" id="phoneDisplay">
+          <div class="phone-status">
+            <span id="phoneClock">12:00</span>
+            <span class="phone-signal" id="phoneSignal">Wi-Fi · ▮▮▮</span>
+          </div>
+
+          <div class="phone-view phone-home" id="phoneHome">
+            <p class="phone-greeting">Hej 👋</p>
+            <div class="phone-apps" id="phoneApps">
+              <button type="button" class="phone-app-btn" data-phone-app="phone">
+                <span class="phone-app-icon phone">☎</span>
+                <span>Telefon</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="sms">
+                <span class="phone-app-icon sms">💬</span>
+                <span>SMS</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="wifi">
+                <span class="phone-app-icon wifi">⌂</span>
+                <span>Wi-Fi</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="bluetooth">
+                <span class="phone-app-icon bluetooth">BT</span>
+                <span>Bluetooth</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="tiktok">
+                <span class="phone-app-icon tiktok">♪</span>
+                <span>TikTok</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="snapchat">
+                <span class="phone-app-icon snapchat">👻</span>
+                <span>Snapchat</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="youtube">
+                <span class="phone-app-icon youtube">▶</span>
+                <span>YouTube</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="camera">
+                <span class="phone-app-icon camera">◎</span>
+                <span>Kamera</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="photos">
+                <span class="phone-app-icon photos">▣</span>
+                <span>Bilder</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="maps">
+                <span class="phone-app-icon maps">◎</span>
+                <span>Kartor</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="weather">
+                <span class="phone-app-icon weather">☁</span>
+                <span>Väder</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="calc">
+                <span class="phone-app-icon calc">＝</span>
+                <span>Kalkylator</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="notes">
+                <span class="phone-app-icon notes">✎</span>
+                <span>Anteckningar</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="clock">
+                <span class="phone-app-icon clock">◷</span>
+                <span>Klocka</span>
+              </button>
+              <button type="button" class="phone-app-btn" data-phone-app="settings">
+                <span class="phone-app-icon settings">⚙</span>
+                <span>Inställningar</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="phone-view phone-tiktok" id="phoneTikTok" hidden>
+            <div class="tt-top">
+              <span>Följer</span>
+              <strong>För dig</strong>
+              <span>Live</span>
+            </div>
+            <div class="tt-feed" id="ttFeed" tabindex="0" aria-label="TikTok-flöde"></div>
+            <div class="tt-side" id="ttSide">
+              <button type="button" class="tt-act" id="ttLike" aria-label="Gilla">♥</button>
+              <button type="button" class="tt-act" id="ttComment" aria-label="Kommentar">💬</button>
+              <button type="button" class="tt-act" id="ttShare" aria-label="Dela">↗</button>
+            </div>
+            <div class="tt-meta">
+              <strong id="ttUser">@nermin</strong>
+              <p id="ttCaption">Video</p>
+            </div>
+            <div class="tt-nav">
+              <button type="button" id="ttPrev">↑ Förra</button>
+              <button type="button" id="ttNext">Nästa ↓</button>
+            </div>
+          </div>
+
+          <div class="phone-view phone-snap" id="phoneSnap" hidden>
+            <div class="snap-cam" id="snapCam">
+              <video id="snapCamVideo" playsinline autoplay muted></video>
+              <div class="snap-cam-flash" id="snapCamFlash"></div>
+              <p class="snap-cam-hint" id="snapCamHint">Startar kamera…</p>
+              <div class="snap-cam-top">
+                <button type="button" class="snap-top-btn" id="snapShowChats">👻</button>
+                <strong>Snapchat</strong>
+                <span class="snap-badge" id="snapBadge">0</span>
+              </div>
+              <div class="snap-cam-bottom">
+                <button type="button" class="snap-flip-btn" id="snapFlipCam">Byt</button>
+                <button type="button" class="snap-shutter" id="snapShutter" aria-label="Ta snap"></button>
+                <button type="button" class="snap-flip-btn" id="snapOpenStories">Stories</button>
+              </div>
+            </div>
+
+            <div class="snap-preview" id="snapPreview" hidden>
+              <img id="snapPreviewImg" alt="Snap" />
+              <p class="snap-preview-label">Skicka till</p>
+              <div class="snap-send-list" id="snapSendList"></div>
+              <div class="snap-preview-actions">
+                <button type="button" id="snapRetake">Om</button>
+                <button type="button" class="snap-send-all" id="snapSendStory">Min story</button>
+              </div>
+            </div>
+
+            <div class="snap-chats" id="snapChats" hidden>
+              <div class="snap-head">
+                <button type="button" class="sms-back" id="snapBackCam">←</button>
+                <strong>Chattar</strong>
+                <span class="snap-badge" id="snapBadge2">0</span>
+              </div>
+              <div class="snap-stories" id="snapStories"></div>
+            </div>
+
+            <div class="snap-viewer" id="snapViewer" hidden>
+              <iframe id="snapFrame" title="Snap" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+              <img id="snapPhotoView" class="snap-photo-view" alt="Snap" hidden />
+              <button type="button" class="snap-close-vid" id="snapCloseVid">✕</button>
+              <p class="snap-viewer-name" id="snapViewerName"></p>
+            </div>
+          </div>
+
+          <div class="phone-view phone-yt" id="phoneYtApp" hidden>
+            <div class="pyt-head">
+              <strong>YouTube</strong>
+            </div>
+            <div class="pyt-player" id="pytPlayer">
+              <iframe id="pytFrame" title="YouTube mobil" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+              <div class="pyt-empty" id="pytEmpty">Välj en video</div>
+            </div>
+            <div class="pyt-list" id="pytList"></div>
+          </div>
+
+          <div class="phone-view phone-settings" id="phoneSettings" hidden>
+            <div class="settings-head">
+              <strong>Inställningar</strong>
+            </div>
+            <div class="settings-body" id="settingsBody"></div>
+          </div>
+
+          <div class="phone-view phone-bt" id="phoneBluetooth" hidden>
+            <div class="bt-head">
+              <strong>Bluetooth</strong>
+              <button type="button" class="bt-power" id="btPower" aria-pressed="true">På</button>
+            </div>
+            <p class="bt-status" id="btStatus">Söker enheter…</p>
+            <div class="bt-list" id="btList"></div>
+          </div>
+
+          <div class="phone-view phone-wifi" id="phoneWifi" hidden>
+            <div class="bt-head">
+              <strong>Wi-Fi</strong>
+              <button type="button" class="bt-power" id="wifiPower" aria-pressed="true">På</button>
+            </div>
+            <p class="bt-status" id="wifiStatus">Söker nätverk…</p>
+            <div class="bt-list" id="wifiList"></div>
+          </div>
+
+          <div class="phone-view phone-sms" id="phoneSms" hidden>
+            <div class="sms-head">
+              <strong>Meddelanden</strong>
+            </div>
+            <div class="sms-threads" id="smsThreads"></div>
+            <div class="sms-chat" id="smsChat" hidden>
+              <div class="sms-chat-bar">
+                <button type="button" class="sms-back" id="smsBack">←</button>
+                <strong id="smsChatName">Kontakt</strong>
+              </div>
+              <div class="sms-bubbles" id="smsBubbles"></div>
+              <form class="sms-compose" id="smsCompose">
+                <input id="smsInput" type="text" placeholder="SMS…" maxlength="160" autocomplete="off" />
+                <button type="submit">Skicka</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="phone-view phone-dial" id="phoneDial" hidden>
+            <div class="dial-head">
+              <strong>Telefon</strong>
+            </div>
+            <p class="dial-number" id="dialNumber"></p>
+            <div class="dial-pad" id="dialPad"></div>
+            <div class="dial-contacts" id="dialContacts"></div>
+            <div class="dial-actions">
+              <button type="button" class="dial-call" id="dialCall">Ring</button>
+              <button type="button" class="dial-del" id="dialDel">⌫</button>
+            </div>
+          </div>
+
+          <div class="phone-view phone-simple" id="phoneSimple" hidden>
+            <div class="simple-head">
+              <strong id="simpleTitle">App</strong>
+            </div>
+            <div class="simple-body" id="simpleBody"></div>
+          </div>
+        </div>
+        <button type="button" class="phone-home-pill" id="phoneHomePill" aria-label="Hemskärm"></button>
+      </div>
+      <button type="button" class="phone-dismiss" id="phoneDismiss">Stäng mobil</button>
+    </div>
+
+    <div class="call-overlay" id="callOverlay" hidden>
+      <div class="call-card" role="dialog" aria-modal="true" aria-labelledby="callName">
+        <p class="call-eyebrow">Inkommande samtal</p>
+        <div class="call-avatar" id="callAvatar">☎</div>
+        <strong id="callName">Okänd</strong>
+        <p class="call-status" id="callStatus">Ringer…</p>
+        <div class="call-actions">
+          <button type="button" class="call-btn decline" id="callDecline">Avvisa</button>
+          <button type="button" class="call-btn answer" id="callAnswer">Svara</button>
+          <button type="button" class="call-btn hangup" id="callHangup" hidden>Lägg på</button>
         </div>
       </div>
     </div>
@@ -404,64 +664,7 @@
       </span>
       <span class="held-key-label">Håller ny motor</span>
     </div>
-
-    <div class="phone-screen" id="phoneScreen" hidden>
-      <div class="phone-shell" role="dialog" aria-modal="true" aria-labelledby="phoneTitle">
-        <div class="phone-status">
-          <span id="phoneClock">12:00</span>
-          <span class="phone-bt-badge" id="phoneBtBadge">BT av</span>
-          <span class="phone-signal">●●●</span>
-        </div>
-        <header class="phone-header">
-          <h2 id="phoneTitle">Din mobil</h2>
-          <button type="button" class="phone-close" id="closePhone" aria-label="Lägg undan">✕</button>
-        </header>
-
-        <div class="phone-home" id="phoneHome">
-          <p class="phone-sub">Koppla till bilen via Bluetooth</p>
-          <div class="phone-grid" role="list">
-            <button type="button" class="phone-app" data-app="tiktok" role="listitem">
-              <span class="app-icon tiktok" aria-hidden="true">TT</span>
-              <span>TikTok</span>
-            </button>
-            <button type="button" class="phone-app" data-app="youtube" role="listitem">
-              <span class="app-icon youtube" aria-hidden="true">▶</span>
-              <span>YouTube</span>
-            </button>
-            <button type="button" class="phone-app" data-app="musik" role="listitem">
-              <span class="app-icon musik" aria-hidden="true">♪</span>
-              <span>Musik</span>
-            </button>
-            <button type="button" class="phone-app" data-app="radio" role="listitem">
-              <span class="app-icon radio" aria-hidden="true">FM</span>
-              <span>Radio</span>
-            </button>
-            <button type="button" class="phone-app" data-app="google" role="listitem">
-              <span class="app-icon google" aria-hidden="true">G</span>
-              <span>Google</span>
-            </button>
-            <button type="button" class="phone-app" data-app="snapchat" role="listitem">
-              <span class="app-icon snapchat" aria-hidden="true">👻</span>
-              <span>Snapchat</span>
-            </button>
-            <button type="button" class="phone-app" data-app="bluetooth" role="listitem">
-              <span class="app-icon bluetooth" aria-hidden="true">BT</span>
-              <span>Bluetooth</span>
-            </button>
-            <button type="button" class="phone-app" data-app="settings" role="listitem">
-              <span class="app-icon settings" aria-hidden="true">⚙</span>
-              <span>Inställningar</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="phone-app-view" id="phoneAppView" hidden>
-          <button type="button" class="phone-back" id="phoneBack">← Tillbaka</button>
-          <div class="phone-app-body" id="phoneAppBody"></div>
-        </div>
-      </div>
-    </div>
   </div>
-  <script src="script.js?v=7"></script>
+  <script src="script.js?v=boom1"></script>
 </body>
 </html>
